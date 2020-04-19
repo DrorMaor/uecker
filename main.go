@@ -7,18 +7,33 @@ import (
     "os"
     "strings"
     "strconv"
+    "math"
+    "math/rand"
+    "time"
 )
 
-var AwayTeam team
-var HomeTeam team
+var Teams [2]team
+var BattingTeamIndex int = 0
+var Inning inning
+var Count count
+// we allow up to 5 errors per game (both teams combined)
+// randomly, an error will occur, until this # is reached
+var MaxErrors int = math.Floor(GetRand()*5)
+var ErrorCount int = 0
 
 type inning struct {
     num int
     TopBottom bool  // top True, bottom False
+    outs int
     // runners on bases:
     first bool
     second bool
     third bool
+}
+
+type count struct {
+    balls int
+    strikes int
 }
 
 type team struct {
@@ -29,6 +44,7 @@ type team struct {
     batter int  // # in the lineup
     pitcher int // # in the pitchers list
     score int
+    AtBatNum int
 }
 
 type batter struct {
@@ -43,11 +59,192 @@ type pitcher struct {
 }
 
 func main() {
-    AwayTeam = GetLineup("AwayTeam", AwayTeam)
-    HomeTeam = GetLineup("HomeTeam", HomeTeam)
+    Teams[0] = GetLineup("AwayTeam", Teams[0])
+    Teams[1] = GetLineup("HomeTeam", Teams[1])
+    PlayBall()
+}
 
-    fmt.Printf("%+v\n\n", AwayTeam)
-    fmt.Printf("%+v\n\n", HomeTeam)
+func PlayBall() {
+    Inning.num = 1
+    Inning.TopBottom = false
+    for {
+        if (Inning.num < 9 || (Inning.num >=9 && Team[0].score >= Team[1].score) ) {
+            DoInning()
+        } else {
+            GameOver()
+        }
+    }
+}
+
+func GameOver() {
+
+}
+
+func DoInning() {
+    Inning.outs = 0
+    for {
+        if (Inning.outs == 3) {
+            if (Inning.TopBottom == true) {
+                Inning.num ++
+                Inning.TopBottom = !Inning.TopBottom
+                if Inning.TopBottom {
+                    BattingTeamIndex = 0
+                } else {
+                    BattingTeamIndex = 1
+                }
+            }
+            break
+        } else {
+            AtBat()
+        }
+    }
+}
+
+func AtBat() {
+    Count.balls = 0
+    Count.strikes = 0
+    for {
+        if (Count.balls < 4 && Count.strikes < 3) {
+            Pitch()
+        } else {
+            break
+        }
+    }
+}
+
+func Pitch() {
+    p := GetRand()
+    if r < .333 {
+        // ball
+        Count.balls ++
+        if Count.balls == 4 {
+            // walk
+            AdvanceRunners(0, -1)
+        }
+    } else if p >= .333 && r < .667  {
+        // strike
+        if ! (Count.strikes == 2 && GetRand() < .5) {
+            // only add strike if it's not Strike 2 now and it's not a foul ball
+            Count.strikes ++
+            if Count.strikes == 3 {
+                DoOut(true)
+            }
+        }
+    } else {
+        // hit in play
+        // determine if it's a hit or out
+        h := GetRand()
+        if h < team.batters[team.AtBatNum].AVG {
+            // he's on base
+            // determine which hit type
+            r := GetRand()
+            if r < .1 {
+                DoHit(4)
+            } else if r >= .1 && r < .15 {
+                DoHit(3)
+            } else if r >= .15 && r < .33 {
+                DoHit(2)
+            } else {
+                DoHit(1)
+            }
+        } else {
+            // he's out
+            DoOut(false)
+        }
+    }
+}
+
+func DoHit(bases int) {
+    // most hits are out of the infield, so we assume them here
+    outfield := math.Floor(GetRand()*3) + 6  // left, center, or right field (nfk"m for runner scoring from second)
+    AdvanceRunners(bases, outfield)
+}
+
+func AdvanceRunners(bases int, pos int ) {
+    // bases: # of bases of hit
+    // pos: defensive position where ball was hit
+    switch bases {
+        case -1: // out (sac fly)
+            if pos >=6 && Inning.third {
+                Inning.third = false
+                Teams[BattingTeamIndex].score ++
+            }
+        case 0: // walk
+            switch BasesStatus() {
+                case "false|false|false":
+                    Inning.first = true
+                case "true|false|false":
+                    Inning.second = true
+                case "false|true|false":
+                    Inning.first = true
+                case "false|false|true":
+                    Inning.first = true
+                case "true|true|false":
+                    Inning.third = true
+                case "true|true|false":
+                    Inning.second = true
+                case "true|false|true":
+                    Inning.first = true
+                case "true|true|true":
+                    Teams[BattingTeamIndex].score ++
+            }
+        case 1:
+            switch BasesStatus() {
+                case "false|false|false":
+                    Inning.first = true
+                case "true|false|false":
+                    Inning.first = true
+                    if pos == 8 {
+                        Inning.third = true
+                    } else {
+                        Inning.second = true
+                    }
+                case "false|true|false":
+                    Inning.first = true
+                    Inning.second = false
+                    Teams[BattingTeamIndex].score ++
+                case "false|false|true":
+                    Inning.first = true
+                    Teams[BattingTeamIndex].score ++
+                    Inning.first = true
+                case "true|true|false":
+
+                case "true|true|false":
+
+                case "true|false|true":
+
+                case "true|true|true":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                    Teams[BattingTeamIndex].score += 4
+            }
+        case 2:
+
+        case 3:
+
+        case 4:
+
+    }
+}
+
+func BasesStatus () {
+    return strconv.FormatBool(Inning.first) + "|" + strconv.FormatBool(Inning.second)  + "|" + strconv.FormatBool(Inning.third)
+}
+
+func DoOut(strikeout bool) {
+    if !strikeout {
+        pos := math.Floor(GetRand()*9) +1
+        if pos >=7 {
+            AdvanceRunners(-1, pos)
+        }
+    }
+    Inning.outs ++
+}
+
+func GetRand() float64 {
+    r := rand.New(rand.NewSource(time.Now().UnixNano()))
+    return r.Float64()
 }
 
 func GetLineup(FileName string, Team team ) team {
@@ -57,14 +254,13 @@ func GetLineup(FileName string, Team team ) team {
 	}
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	var txtlines []string
-
+	var txtLines []string
 	for scanner.Scan() {
-		txtlines = append(txtlines, scanner.Text())
+		txtLines = append(txtLines, scanner.Text())
 	}
 	file.Close()
 
-	for _, eachline := range txtlines {
+	for _, eachline := range txtLines {
         line := strings.Split(eachline, "|")
         stat, err := strconv.ParseFloat(line[2], 64)
         if err != nil {
@@ -72,7 +268,7 @@ func GetLineup(FileName string, Team team ) team {
         }
         switch line[0] {
             case "SP":
-        		Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], stat})
+        		fallthrough
             case "RP":
         		Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], stat})
         	case "name":
@@ -87,7 +283,7 @@ func GetLineup(FileName string, Team team ) team {
                   // insert error handling here
                 }
                 Team.pct = W / (W + L)
-        	default:
+        	default:  // regular position players
         		Team.batters = append(Team.batters, batter{line[0], line[1], stat})
         }
 	}
