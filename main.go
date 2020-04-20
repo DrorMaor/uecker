@@ -18,8 +18,8 @@ var Inning inning
 var Count count
 // we allow up to 5 errors per game (both teams combined)
 // randomly, an error will occur, until this # is reached
-var MaxErrors int = math.Floor(GetRand()*5)
-var ErrorCount int = 0
+var MaxErrors float64 = math.Floor(GetRand()*5)
+var ErrorCount float64 = 0
 
 type inning struct {
     num int
@@ -68,7 +68,7 @@ func PlayBall() {
     Inning.num = 1
     Inning.TopBottom = false
     for {
-        if (Inning.num < 9 || (Inning.num >=9 && Team[0].score >= Team[1].score) ) {
+        if (Inning.num < 9 || (Inning.num >=9 && Teams[0].score >= Teams[1].score) ) {
             DoInning()
         } else {
             GameOver()
@@ -77,7 +77,7 @@ func PlayBall() {
 }
 
 func GameOver() {
-
+    fmt.Println ("the winner is.....")
 }
 
 func DoInning() {
@@ -114,14 +114,14 @@ func AtBat() {
 
 func Pitch() {
     p := GetRand()
-    if r < .333 {
+    if p < .333 {
         // ball
         Count.balls ++
         if Count.balls == 4 {
             // walk
             AdvanceRunners(0, -1)
         }
-    } else if p >= .333 && r < .667  {
+    } else if p >= .333 && p < .667  {
         // strike
         if ! (Count.strikes == 2 && GetRand() < .5) {
             // only add strike if it's not Strike 2 now and it's not a foul ball
@@ -134,7 +134,7 @@ func Pitch() {
         // hit in play
         // determine if it's a hit or out
         h := GetRand()
-        if h < team.batters[team.AtBatNum].AVG {
+        if h < Teams[BattingTeamIndex].batters[Teams[BattingTeamIndex].AtBatNum].AVG {
             // he's on base
             // determine which hit type
             r := GetRand()
@@ -160,75 +160,251 @@ func DoHit(bases int) {
     AdvanceRunners(bases, outfield)
 }
 
-func AdvanceRunners(bases int, pos int ) {
+func AdvanceRunners(bases int, pos float64 ) {
     // bases: # of bases of hit
     // pos: defensive position where ball was hit
     switch bases {
         case -1: // out (sac fly)
             if pos >=6 && Inning.third {
-                Inning.third = false
+                Inning.third = false  // the other 2 baserunners stay the same
                 Teams[BattingTeamIndex].score ++
             }
         case 0: // walk
             switch BasesStatus() {
                 case "false|false|false":
                     Inning.first = true
+                    Inning.second = false
+                    Inning.third = false
                 case "true|false|false":
+                    Inning.first = true
                     Inning.second = true
+                    Inning.third = false
                 case "false|true|false":
                     Inning.first = true
+                    Inning.second = true
+                    Inning.third = false
                 case "false|false|true":
                     Inning.first = true
-                case "true|true|false":
+                    Inning.second = false
                     Inning.third = true
                 case "true|true|false":
+                    Inning.first = true
                     Inning.second = true
+                    Inning.third = true
                 case "true|false|true":
                     Inning.first = true
+                    Inning.second = true
+                    Inning.third = true
+                case "false|true|true":
+                    Inning.first = true
+                    Inning.second = true
+                    Inning.third = true
                 case "true|true|true":
                     Teams[BattingTeamIndex].score ++
+                    Inning.first = true
+                    Inning.second = true
+                    Inning.third = true
             }
         case 1:
             switch BasesStatus() {
                 case "false|false|false":
                     Inning.first = true
+                    Inning.second = false
+                    Inning.third = false
                 case "true|false|false":
                     Inning.first = true
+                    if pos == 8 {
+                        Inning.second = false
+                        Inning.third = true
+                    } else {
+                        Inning.second = true
+                        Inning.third = false
+                    }
+                case "false|true|false":
+                    Inning.first = true
+                    Inning.second = false
+                    Inning.third = false
+                    Teams[BattingTeamIndex].score ++
+                case "false|false|true":
+                    Inning.first = true
+                    Inning.second = false
+                    Inning.third = false
+                    Teams[BattingTeamIndex].score ++
+                case "true|true|false":
+                    Inning.first = true
+                    if pos == 7 || pos == 8 {
+                        Inning.second = false
+                        Inning.third = false
+                        Teams[BattingTeamIndex].score ++
+                    } else {
+                        Inning.second = false
+                        Inning.third = true
+                    }
+                case "true|false|true":
+                    Inning.first = true
+                    Inning.third = false
                     if pos == 8 {
                         Inning.third = true
                     } else {
                         Inning.second = true
                     }
-                case "false|true|false":
-                    Inning.first = true
-                    Inning.second = false
                     Teams[BattingTeamIndex].score ++
-                case "false|false|true":
-                    Inning.first = true
-                    Teams[BattingTeamIndex].score ++
-                    Inning.first = true
-                case "true|true|false":
-
-                case "true|true|false":
-
-                case "true|false|true":
-
+                case "false|true|true":
+                    if pos == 7 || pos == 8 {
+                        Teams[BattingTeamIndex].score += 2
+                        Inning.first = true
+                        Inning.second = false
+                        Inning.third = false
+                    } else {
+                        Teams[BattingTeamIndex].score ++
+                        Inning.first = true
+                        Inning.second = false
+                        Inning.third = true
+                    }
                 case "true|true|true":
+                    if pos == 7 || pos == 8 {
+                        Teams[BattingTeamIndex].score += 2
+                        Inning.first = true
+                        Inning.second = false
+                        Inning.third = false
+                    } else {
+                        Teams[BattingTeamIndex].score ++
+                        Inning.first = true
+                        Inning.second = true
+                        Inning.third = true
+                    }
+            }
+        case 2:
+            switch BasesStatus() {
+                case "false|false|false":
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                case "true|false|false":
+                    Teams[BattingTeamIndex].score ++
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                case "false|true|false":
+                    Teams[BattingTeamIndex].score ++
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                case "false|false|true":
+                    Teams[BattingTeamIndex].score ++
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                case "true|true|false":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                case "true|false|true":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                case "false|true|true":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                case "true|true|true":
+                    Teams[BattingTeamIndex].score += 3
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+            }
+        case 3:
+            switch BasesStatus() {
+                case "false|false|false":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                case "true|false|false":
+                    Teams[BattingTeamIndex].score ++
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                case "false|true|false":
+                    Teams[BattingTeamIndex].score ++
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                case "false|false|true":
+                    Teams[BattingTeamIndex].score ++
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                case "true|true|false":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                case "true|false|true":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                case "false|true|true":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                case "true|true|true":
+                    Teams[BattingTeamIndex].score += 3
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+            }
+        case 4:
+            switch BasesStatus() {
+                case "false|false|false":
+                    Teams[BattingTeamIndex].score ++
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
+                case "true|false|false":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                case "false|true|false":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                case "false|false|true":
+                    Teams[BattingTeamIndex].score += 2
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                case "true|true|false":
+                    Teams[BattingTeamIndex].score += 3
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                case "true|false|true":
+                    Teams[BattingTeamIndex].score += 3
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                case "false|true|true":
+                    Teams[BattingTeamIndex].score += 3
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                case "true|true|true":
                     Teams[BattingTeamIndex].score += 4
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
             }
-        case 2:
-
-        case 3:
-
-        case 4:
-
     }
 }
 
-func BasesStatus () {
+func BasesStatus() string {
     return strconv.FormatBool(Inning.first) + "|" + strconv.FormatBool(Inning.second)  + "|" + strconv.FormatBool(Inning.third)
 }
 
