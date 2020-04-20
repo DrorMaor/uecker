@@ -13,7 +13,7 @@ import (
 )
 
 var Teams [2]team
-var BattingTeamIndex int = 0
+var bti int = 0  // Batting Team Index (too long to write full name each time)
 var Inning inning
 var Count count
 // we allow up to 5 errors per game (both teams combined)
@@ -37,6 +37,7 @@ type count struct {
 }
 
 type team struct {
+    city string
     name string
     pct float64
     batters []batter
@@ -52,6 +53,7 @@ type batter struct {
 	name string
     AVG float64
 }
+
 type pitcher struct {
     position string
     name string
@@ -65,61 +67,119 @@ func main() {
 }
 
 func PlayBall() {
+    fmt.Printf ("The %s %s will be hosting the %s %s today.\n", Teams[1].city, Teams[1].name, Teams[0].city, Teams[0].name)
     Inning.num = 1
     Inning.TopBottom = false
-    for {
-        if (Inning.num < 9 || (Inning.num >=9 && Teams[0].score >= Teams[1].score) ) {
-            DoInning()
-        } else {
-            GameOver()
-        }
-    }
+    Teams[0].AtBatNum = 0
+    Teams[1].AtBatNum = 0
+    StartInning()
 }
 
 func GameOver() {
-    fmt.Println ("the winner is.....")
+    os.Exit(-1)
 }
 
-func DoInning() {
+func StartInning() {
+    s := "We go to the "
+    if !Inning.TopBottom {
+        s += "top"
+    } else {
+        s += "bottom"
+    }
+    s += " of the " + strconv.Itoa(Inning.num)
+    switch Inning.num {
+        case 1:
+            s += "st"
+        case 2:
+            s += "nd"
+        default:
+            s += "rd"
+    }
+    if GetRand() <.5 {
+        s += " inning"
+    }
+    if GetRand() <.5 {
+        s += ". The"
+    } else {
+        s += ", and the"
+    }
+    s += " score is "
+    if GetRand() <.5 {
+        s += Teams[0].city + " " + strconv.Itoa(Teams[0].score) + " and "
+        s += Teams[1].city + " " + strconv.Itoa(Teams[1].score)
+    } else {
+        s += "the " + Teams[0].name + " " + strconv.Itoa(Teams[0].score) + " and "
+        s += "the " + Teams[1].name + " " + strconv.Itoa(Teams[1].score)
+    }
+    fmt.Println (s)
+
     Inning.outs = 0
     for {
-        if (Inning.outs == 3) {
-            if (Inning.TopBottom == true) {
-                Inning.num ++
-                Inning.TopBottom = !Inning.TopBottom
-                if Inning.TopBottom {
-                    BattingTeamIndex = 0
-                } else {
-                    BattingTeamIndex = 1
-                }
-            }
+        DoAtBat()
+        if Inning.outs == 3 {
+            EndInning()
             break
-        } else {
-            AtBat()
         }
     }
 }
 
-func AtBat() {
+func DoAtBat() {
+    s := "Leading off"
+    if Inning.outs >0 {
+        s = "Batting next"
+    }
+    s += " for the " + Teams[bti].name
+    if GetRand() <.5 {
+        s += " will be "
+    } else {
+        s += " is "
+    }
+    s += Teams[bti].batters[Teams[bti].AtBatNum].name
+    fmt.Println (s)
+
     Count.balls = 0
     Count.strikes = 0
     for {
         if (Count.balls < 4 && Count.strikes < 3) {
-            Pitch()
+            DoPitch()
         } else {
-            break
+            if Inning.outs == 3 {
+                EndInning()
+            }
         }
     }
 }
 
-func Pitch() {
+func EndInning() {
+    Inning.outs = 0
+    if (Inning.TopBottom == true) {
+        Inning.num ++
+    }
+    Inning.TopBottom = !Inning.TopBottom
+    if Inning.TopBottom {
+        bti = 0
+    } else {
+        bti = 1
+    }
+
+    //if (Inning.num < 9 || (Inning.num >=9 && Teams[0].score >= Teams[1].score) ) {
+    if (Inning.num <9) {
+        StartInning()
+    } else {
+        GameOver()
+    }
+}
+
+func DoPitch() {
     p := GetRand()
     if p < .333 {
         // ball
         Count.balls ++
         if Count.balls == 4 {
             // walk
+            Count.balls = 0
             AdvanceRunners(0, -1)
+            DoAtBat()
         }
     } else if p >= .333 && p < .667  {
         // strike
@@ -128,13 +188,14 @@ func Pitch() {
             Count.strikes ++
             if Count.strikes == 3 {
                 DoOut(true)
+                DoAtBat()
             }
         }
     } else {
         // hit in play
         // determine if it's a hit or out
         h := GetRand()
-        if h < Teams[BattingTeamIndex].batters[Teams[BattingTeamIndex].AtBatNum].AVG {
+        if h < Teams[bti].batters[Teams[bti].AtBatNum].AVG {
             // he's on base
             // determine which hit type
             r := GetRand()
@@ -158,6 +219,14 @@ func DoHit(bases int) {
     // most hits are out of the infield, so we assume them here
     outfield := math.Floor(GetRand()*3) + 6  // left, center, or right field (nfk"m for runner scoring from second)
     AdvanceRunners(bases, outfield)
+    AdvanceLineup()
+}
+
+func AdvanceLineup() {
+    Teams[bti].AtBatNum ++
+    if Teams[bti].AtBatNum % 9 == 0 {
+        Teams[bti].AtBatNum = 0
+    }
 }
 
 func AdvanceRunners(bases int, pos float64 ) {
@@ -167,7 +236,7 @@ func AdvanceRunners(bases int, pos float64 ) {
         case -1: // out (sac fly)
             if pos >=6 && Inning.third {
                 Inning.third = false  // the other 2 baserunners stay the same
-                Teams[BattingTeamIndex].score ++
+                Teams[bti].score ++
             }
         case 0: // walk
             switch BasesStatus() {
@@ -200,7 +269,7 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.second = true
                     Inning.third = true
                 case "true|true|true":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = true
                     Inning.second = true
                     Inning.third = true
@@ -224,18 +293,18 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.first = true
                     Inning.second = false
                     Inning.third = false
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                 case "false|false|true":
                     Inning.first = true
                     Inning.second = false
                     Inning.third = false
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                 case "true|true|false":
                     Inning.first = true
                     if pos == 7 || pos == 8 {
                         Inning.second = false
                         Inning.third = false
-                        Teams[BattingTeamIndex].score ++
+                        Teams[bti].score ++
                     } else {
                         Inning.second = false
                         Inning.third = true
@@ -248,27 +317,27 @@ func AdvanceRunners(bases int, pos float64 ) {
                     } else {
                         Inning.second = true
                     }
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                 case "false|true|true":
                     if pos == 7 || pos == 8 {
-                        Teams[BattingTeamIndex].score += 2
+                        Teams[bti].score += 2
                         Inning.first = true
                         Inning.second = false
                         Inning.third = false
                     } else {
-                        Teams[BattingTeamIndex].score ++
+                        Teams[bti].score ++
                         Inning.first = true
                         Inning.second = false
                         Inning.third = true
                     }
                 case "true|true|true":
                     if pos == 7 || pos == 8 {
-                        Teams[BattingTeamIndex].score += 2
+                        Teams[bti].score += 2
                         Inning.first = true
                         Inning.second = false
                         Inning.third = false
                     } else {
-                        Teams[BattingTeamIndex].score ++
+                        Teams[bti].score ++
                         Inning.first = true
                         Inning.second = true
                         Inning.third = true
@@ -281,37 +350,37 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.second = true
                     Inning.third = false
                 case "true|false|false":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "false|true|false":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "false|false|true":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "true|true|false":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "true|false|true":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "false|true|true":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "true|true|true":
-                    Teams[BattingTeamIndex].score += 3
+                    Teams[bti].score += 3
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
@@ -323,37 +392,37 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.second = false
                     Inning.third = true
                 case "true|false|false":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "false|true|false":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "false|false|true":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "true|true|false":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "true|false|true":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "false|true|true":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "true|true|true":
-                    Teams[BattingTeamIndex].score += 3
+                    Teams[bti].score += 3
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
@@ -361,42 +430,42 @@ func AdvanceRunners(bases int, pos float64 ) {
         case 4:
             switch BasesStatus() {
                 case "false|false|false":
-                    Teams[BattingTeamIndex].score ++
+                    Teams[bti].score ++
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|false|false":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "false|true|false":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "false|false|true":
-                    Teams[BattingTeamIndex].score += 2
+                    Teams[bti].score += 2
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|true|false":
-                    Teams[BattingTeamIndex].score += 3
+                    Teams[bti].score += 3
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|false|true":
-                    Teams[BattingTeamIndex].score += 3
+                    Teams[bti].score += 3
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "false|true|true":
-                    Teams[BattingTeamIndex].score += 3
+                    Teams[bti].score += 3
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|true|true":
-                    Teams[BattingTeamIndex].score += 4
+                    Teams[bti].score += 4
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
@@ -415,7 +484,13 @@ func DoOut(strikeout bool) {
             AdvanceRunners(-1, pos)
         }
     }
+    Count.strikes = 0
+    Count.balls = 0
     Inning.outs ++
+    AdvanceLineup()
+    if Inning.outs == 3 {
+        EndInning()
+    }
 }
 
 func GetRand() float64 {
@@ -447,6 +522,8 @@ func GetLineup(FileName string, Team team ) team {
         		fallthrough
             case "RP":
         		Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], stat})
+            case "city":
+                Team.city = line[1]
         	case "name":
                 Team.name = line[1]
                 WL := strings.Split(line[2], "-")
