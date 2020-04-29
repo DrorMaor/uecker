@@ -41,7 +41,8 @@ type count struct {
 type team struct {
     city string
     name string
-    pct float64
+    short string  // 3 letter short team (such as MIL)
+    pct float64   // winning percentage: W/(W+L)
     batters []batter
     pitchers []pitcher
     batter int  // # in the lineup
@@ -183,7 +184,6 @@ func DoPitch() {
 
                 if Count.strikes == 3 {
                     DoOut(true)
-                    DoAtBat()
                 }
             }
         }
@@ -192,7 +192,7 @@ func DoPitch() {
         // determine if it's a hit or out
         if GetRand() < Teams[bti].batters[Teams[bti].AtBatNum].AVG {
             // he's on base
-            // determine which hit type
+            // determine which hit type (param is # of bases in hit)
             r := GetRand()
             if r < .1 {
                 DoHit(4)
@@ -220,6 +220,7 @@ func DoHit(bases int) {
     outfield := math.Floor(GetRand()*3) + 6  // left, center, or right field (nfk"m for runner scoring from second)
     AdvanceRunners(bases, outfield)
     AdvanceLineup()
+    DoAtBat()
 }
 
 func AdvanceLineup() {
@@ -484,6 +485,7 @@ func DoOut(strikeout bool) {
         if pos >=7 {
             AdvanceRunners(-1, pos)
         }
+        GameScript(int(pos + 30))
     }
     Count.strikes = 0
     Count.balls = 0
@@ -492,6 +494,7 @@ func DoOut(strikeout bool) {
     if Inning.outs == 3 {
         EndInning()
     } else {
+        GameScript(40)
         DoAtBat()
     }
 }
@@ -527,8 +530,10 @@ func GetLineup(FileName string, Team team ) team {
         		Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], line[2], stat})
             case "city":
                 Team.city = line[1]
-        	  case "name":
+        	case "name":
                 Team.name = line[1]
+            case "short":
+                Team.short = line[1]
             case "WL":
                 W, err := strconv.ParseFloat(line[1], 64)
                 if err != nil {
@@ -551,8 +556,7 @@ func GameScript(id int) {
     switch id {
         case 1:
             // start of game
-            script += fmt.Sprintf("The %s %s will be hosting the %s %s\n\n", Teams[1].city, Teams[1].name, Teams[0].city, Teams[0].name)
-            // print the lineup
+            // print the lineups
             for _, team := range Teams {
                 script += fmt.Sprintf("%s's lineup:\n", team.city)
                 for _, batter := range team.batters {
@@ -589,7 +593,7 @@ func GameScript(id int) {
             } else {
                 script += "Leading off"
             }
-            script += fmt.Sprintf(" for %s, %s %s %s", Teams[bti].city, Teams[bti].batters[Teams[bti].AtBatNum].position, Teams[bti].batters[Teams[bti].AtBatNum].FirstName, Teams[bti].batters[Teams[bti].AtBatNum].LastName)
+            script += fmt.Sprintf(" for %s, %s %s %s", Teams[bti].short, Teams[bti].batters[Teams[bti].AtBatNum].position, Teams[bti].batters[Teams[bti].AtBatNum].FirstName, Teams[bti].batters[Teams[bti].AtBatNum].LastName)
 
             Inning.LeadOff = false
         case 6:
@@ -637,14 +641,37 @@ func GameScript(id int) {
         case 15:
             // foul ball
             script += "Foul ball. " + CountScript()
-        case 16:
 
+        // these are all outs
+        case 31:
+            script += "Groundout to the pitcher."
+        case 32:
+            script += "Popout to the catcher."
+        case 33:
+            script += "Groundout to first."
+        case 34:
+            script += "Groundout to second."
+        case 35:
+            script += "Groundout to third."
+        case 36:
+            script += "Groundout to the shortstop."
+        case 37:
+            script += "Flyout to left."
+        case 38:
+            script += "Flyout to center."
+        case 39:
+            script += "Flyout to right."
+        case 40:
+            script += fmt.Sprintf("%d out", Inning.outs)
+            if Inning.outs == 2 {
+                script += "s"
+            }
     }
     fmt.Println(script)
 }
 
 func ScoreScript() string {
-    return fmt.Sprintf("Score: %s %d, %s %d", Teams[0].city, Teams[0].score, Teams[1].city, Teams[1].score)
+    return fmt.Sprintf("Score: %s %d, %s %d", Teams[0].short, Teams[0].score, Teams[1].short, Teams[1].score)
 }
 
 func CountScript() string {
