@@ -1,14 +1,15 @@
-city|Milwaukee|
-name|Brewers|90-60
-3B|Paul Molitor|.315
-SS|Robin Yount|.331
-1B|Cecil Cooper|.305
-CF|Gorman Thomas|.219
-LF|Ben Oglivie|.224
-C|Ted Simmons|.252
-DH|Roy Howell|.234
-RF|Charlie Moore|.274
-2B|Jim Gantner|.298
-SP|Pete Vuckovitch|3.15
-RP|Moose Haas|3.33
-RP|Rollie Fingers|1.04
+city|Milwaukee||
+name|Brewers||
+WL|90|60|
+3B|Paul|Molitor|.315
+SS|Robin|Yount|.331
+1B|Cecil|Cooper|.305
+CF|Gorman|Thomas|.219
+LF|Ben|Oglivie|.224
+C|Ted|Simmons|.252
+DH|Roy|Howell|.234
+RF|Charlie|Moore|.274
+2B|Jim|Gantner|.298
+SP|Pete|Vuckovitch|3.15
+RP|Moose|Haas|3.33
+RP|Rollie|Fingers|1.04
