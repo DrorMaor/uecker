@@ -20,6 +20,7 @@ var Count count
 // randomly, an error will occur, until this # is reached
 var MaxErrors float64 = math.Floor(GetRand()*5)
 var ErrorCount float64 = 0
+var RepeatChars int = 40  // for inning and other --------- separator
 
 type inning struct {
     num int
@@ -51,14 +52,14 @@ type team struct {
 
 type batter struct {
     position string
-	FirstName string
+	  FirstName string
     LastName string
     AVG float64
 }
 
 type pitcher struct {
     position string
-	FirstName string
+	  FirstName string
     LastName string
     ERA float64
 }
@@ -84,13 +85,12 @@ func GameOver() {
 }
 
 func StartInning() {
-    GameScript(2)
     Inning.LeadOff = true
     Inning.outs = 0
     Inning.first = false
     Inning.second = false
     Inning.third = false
-    if (Inning.TopBottom == true) {
+    if Inning.TopBottom {
         Inning.num ++
     }
     Inning.TopBottom = !Inning.TopBottom
@@ -111,7 +111,6 @@ func StartInning() {
 
 func DoAtBat() {
     GameScript(3)
-
     Count.balls = 0
     Count.strikes = 0
     for {
@@ -127,7 +126,7 @@ func DoAtBat() {
 
 func EndInning() {
     // all this occurs at the end of an inning, BEFORE we increment the inning #
-
+    GameScript(2)
     // first 8 innings, always start the next inning (frame)
     if Inning.num < 9  {
         StartInning()
@@ -161,8 +160,8 @@ func DoPitch() {
         if GetRand() < .5 {
             // ball
             Count.balls ++
+            GameScript(12)
             if Count.balls == 4 {
-                GameScript(4)
                 // walk
                 Count.balls = 0
                 AdvanceRunners(0, -1)
@@ -170,11 +169,19 @@ func DoPitch() {
             }
         } else {
             // strike
-            if ! (Count.strikes == 2 && GetRand() < .5) {
+            s := GetRand()
+            if ! (Count.strikes == 2 && s >=.667) {
                 // only add strike if it's not Strike 2 now and it's not a foul ball
                 Count.strikes ++
+                if s <.333 {
+                    GameScript(13)
+                } else if s >=.333 && s <.667 {
+                    GameScript(14)
+                } else {
+                    GameScript(15)
+                }
+
                 if Count.strikes == 3 {
-                    GameScript(5)
                     DoOut(true)
                     DoAtBat()
                 }
@@ -464,6 +471,7 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.third = false
             }
     }
+    GameScript(6)
 }
 
 func BasesStatus() string {
@@ -483,6 +491,8 @@ func DoOut(strikeout bool) {
     AdvanceLineup()
     if Inning.outs == 3 {
         EndInning()
+    } else {
+        DoAtBat()
     }
 }
 
@@ -517,7 +527,7 @@ func GetLineup(FileName string, Team team ) team {
         		Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], line[2], stat})
             case "city":
                 Team.city = line[1]
-        	case "name":
+        	  case "name":
                 Team.name = line[1]
             case "WL":
                 W, err := strconv.ParseFloat(line[1], 64)
@@ -541,110 +551,47 @@ func GameScript(id int) {
     switch id {
         case 1:
             // start of game
-            if GetRand() <.5 {
-                script += fmt.Sprintf("The %s %s will be hosting the %s %s today.", Teams[1].city, Teams[1].name, Teams[0].city, Teams[0].name)
-            } else {
-                script += fmt.Sprintf("The %s %s will be playing at the %s %s today.", Teams[0].city, Teams[0].name, Teams[1].city, Teams[1].name)
-            }
-            script += "\n\n"
+            script += fmt.Sprintf("The %s %s will be hosting the %s %s\n\n", Teams[1].city, Teams[1].name, Teams[0].city, Teams[0].name)
             // print the lineup
             for _, team := range Teams {
-                if GetRand() <.5 {
-                    script += fmt.Sprintf("%s's", team.city)
-                } else {
-                    script += fmt.Sprintf("The %s's", team.name)
-                }
-                script += " lineup "
-                if GetRand() <.5 {
-                    script += "is"
-                } else {
-                    script += "will be"
-                }
-                script += ":\n"
+                script += fmt.Sprintf("%s's lineup:\n", team.city)
                 for _, batter := range team.batters {
-                    script += fmt.Sprintf("The %s, %s %s\n", PositionConv(batter.position), batter.FirstName, batter.LastName)
+                    script += fmt.Sprintf("%s, %s %s\n", batter.position, batter.FirstName, batter.LastName)
                 }
                 script += "\n"
             }
         case 2:
-            // beginning of each half inning
-            if !(Inning.num == 1 && !Inning.TopBottom) {
-                s := "We go to the "
-                if !Inning.TopBottom {
-                    s += "top"
-                } else {
-                    s += "bottom"
-                }
-                s += " of the " + strconv.Itoa(Inning.num)
-                switch Inning.num {
-                    case 1:
-                        s += "st"
-                    case 2:
-                        s += "nd"
-                    case 3:
-                        s += "rd"
-                    default:
-                        s += "th"
-                }
-                if GetRand() <.5 {
-                    s += " inning"
-                }
-                if GetRand() <.5 {
-                    s += ". The"
-                } else {
-                    s += ", and the"
-                }
-                s += " score is "
-                if GetRand() <.5 {
-                    s += Teams[0].city + " " + strconv.Itoa(Teams[0].score) + " and "
-                    s += Teams[1].city + " " + strconv.Itoa(Teams[1].score)
-                } else {
-                    s += "the " + Teams[0].name + " " + strconv.Itoa(Teams[0].score) + " and "
-                    s += "the " + Teams[1].name + " " + strconv.Itoa(Teams[1].score)
-                }
-                script += fmt.Sprintf("%s\n",s)
+            // end of inning
+            script += "End of "
+            if !Inning.TopBottom {
+                script += "top"
+            } else {
+                script += "bottom"
             }
+            script += fmt.Sprintf(" of %d", Inning.num)
+            switch Inning.num {
+                case 1:
+                    script += "st"
+                case 2:
+                    script += "nd"
+                case 3:
+                    script += "rd"
+                default:
+                    script += "th"
+            }
+            script += ". " + ScoreScript()
+            script += "\n" + strings.Repeat("-", RepeatChars) + "\n" + strings.Repeat("-", RepeatChars) + "\n\n"
         case 3:
             // each at bat
-            s := "Leading off"
+            script += strings.Repeat("-", RepeatChars) + "\n"
             if !Inning.LeadOff {
-                if GetRand() <.5 {
-                    s = "Up"
-                } else {
-                    s = "Batting"
-                }
-                s += " next"
-            }
-            s += " for "
-            if GetRand() <.5 {
-                s += "the " + Teams[bti].name
+                script += "Batting"
             } else {
-                s += Teams[bti].city
+                script += "Leading off"
             }
-            if GetRand() <.5 {
-                s += " will be"
-            } else {
-                s += " is"
-            }
-            s += " the " + PositionConv(Teams[bti].batters[Teams[bti].AtBatNum].position) + " "
-            s += Teams[bti].batters[Teams[bti].AtBatNum].FirstName + " " + Teams[bti].batters[Teams[bti].AtBatNum].LastName
-            script += fmt.Sprintf(s)
+            script += fmt.Sprintf(" for %s, %s %s %s", Teams[bti].city, Teams[bti].batters[Teams[bti].AtBatNum].position, Teams[bti].batters[Teams[bti].AtBatNum].FirstName, Teams[bti].batters[Teams[bti].AtBatNum].LastName)
 
             Inning.LeadOff = false
-        case 4:
-            // walk
-            if GetRand() <.5 {
-                script += "Ball 4. "
-            }
-            script += "He walked him\n"
-        case 5:
-            // strikeout
-            if GetRand() <.5 {
-                script += "Strike 3 called"
-            } else {
-                script += "Swing and a miss"
-            }
-            script += ". He struck him out"
         case 6:
             // after runners advancing
             switch BasesStatus() {
@@ -661,105 +608,68 @@ func GameScript(id int) {
                 case "false|true|true":
                     script += "Runners at second and third"
                 case "true|true|true":
-                    script += "The bases are loaded"
+                    script += "Bases loaded"
             }
         case 7:
             // game over
-            script += fmt.Sprintf("And this game is over. The final score: %s %d, %s %d", Teams[0].city, Teams[0].score, Teams[1].city, Teams[1].score)
+            script += "Game over. Final " + ScoreScript()
         case 8:
             // home run
-            script += "The pitch is hit in the air to deep "
-            r := GetRand()
-            if r <.2 {
-                script += "left field"
-            } else if r >=.2 && r <.4 {
-                script += "left center"
-            } else if r >=.4 && r <.6 {
-                script += "center field"
-            } else if r >=.6 && r <.8 {
-                script += "right center"
-            } else {
-                script += "right field"
-            }
-            script += ". Back towards the waaaallll..... GOOONE - a home run!"
+            script += "Homerun to " + RandomField()
         case 9:
             // triple
-            script += "The pitch is driven in the gap to "
-            r := GetRand()
-            if r <.2 {
-                script += "left field"
-            } else if r >=.2 && r <.4 {
-                script += "left center"
-            } else if r >=.4 && r <.6 {
-                script += "center field"
-            } else if r >=.6 && r <.8 {
-                script += "right center"
-            } else {
-                script += "right field"
-            }
-            script += fmt.Sprintf(". %s is speeding around second, and will get to third with a triple.", Teams[bti].batters[Teams[bti].AtBatNum].LastName)
+            script += "Triple to " + RandomField()
         case 10:
             // double
-            script += "The pitch is lined to "
-            r := GetRand()
-            if r <.2 {
-                script += "left field"
-            } else if r >=.2 && r <.4 {
-                script += "left center"
-            } else if r >=.4 && r <.6 {
-                script += "center field"
-            } else if r >=.6 && r <.8 {
-                script += "right center"
-            } else {
-                script += "right field"
-            }
-            script += fmt.Sprintf(". %s is digging for second, and will get in safe with a double.", Teams[bti].batters[Teams[bti].AtBatNum].LastName)
+            script += "Double to " + RandomField()
         case 11:
             // single
-            script += "The pitch is hit to "
-            r := GetRand()
-            if r <.2 {
-                script += "left field"
-            } else if r >=.2 && r <.4 {
-                script += "left center"
-            } else if r >=.4 && r <.6 {
-                script += "center field"
-            } else if r >=.6 && r <.8 {
-                script += "right center"
-            } else {
-                script += "right field"
-            }
-            script += " for a base hit"
+            script += "Single to " + RandomField()
+        case 12:
+            // ball
+            script += "Ball. " + CountScript()
+        case 13:
+            // swinging strike
+            script += "Swing and a miss. " + CountScript()
+        case 14:
+            // called strike
+            script += "Called strike. " + CountScript()
+        case 15:
+            // foul ball
+            script += "Foul ball. " + CountScript()
+        case 16:
 
     }
     fmt.Println(script)
 }
 
-func PositionConv(pos string) string {
-    var conv string = ""
-    switch (pos) {
-        case "SS":
-            conv = "shortstop"
-        case "CF":
-            conv = "center fielder"
-        case "DH":
-            conv = "designated hitter"
-        case "LF":
-            conv = "left fielder"
-        case "2B":
-            conv = "second baseman"
-        case "C":
-            conv = "catcher"
-        case "1B":
-            conv = "first baseman"
-        case "RF":
-            conv = "right fielder"
-        case "3B":
-            conv = "third baseman"
-        case "SP":
-            fallthrough
-        case "RP":
-            conv = "pitcher"
+func ScoreScript() string {
+    return fmt.Sprintf("Score: %s %d, %s %d", Teams[0].city, Teams[0].score, Teams[1].city, Teams[1].score)
+}
+
+func CountScript() string {
+    if Count.balls == 4{
+        return "Walk"
+    } else if Count.strikes == 3 {
+        return "Strikeout"
+    } else {
+        return fmt.Sprintf("Count %d-%d", Count.balls, Count.strikes)
     }
-    return conv
+}
+
+func RandomField () string {
+    var field string = ""
+    r := GetRand()
+    if r <.2 {
+        field = "left field"
+    } else if r >=.2 && r <.4 {
+        field = "left center"
+    } else if r >=.4 && r <.6 {
+        field = "center field"
+    } else if r >=.6 && r <.8 {
+        field = "right center"
+    } else {
+        field = "right field"
+    }
+    return field
 }
