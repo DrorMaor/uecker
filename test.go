@@ -1,7 +1,10 @@
 package main
 
+
 import "fmt"
+import "color"
+import "runtime"
 
 func main () {
-	fmt.Println (5*5)
+	fmt.Println(color.Red + "hey")
 }

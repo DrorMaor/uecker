@@ -73,7 +73,7 @@ func main() {
 
 func PlayBall() {
     GameScript(1)
-    Inning.num = 1
+    Inning.num = 0
     Inning.TopBottom = false
     Teams[0].AtBatNum = 0
     Teams[1].AtBatNum = 0
@@ -91,15 +91,13 @@ func StartInning() {
     Inning.first = false
     Inning.second = false
     Inning.third = false
-    if Inning.TopBottom {
+    if !Inning.TopBottom {
         Inning.num ++
-    }
-    Inning.TopBottom = !Inning.TopBottom
-    if Inning.TopBottom {
         bti = 0
     } else {
         bti = 1
     }
+    Inning.TopBottom = !Inning.TopBottom
 
     for {
         DoAtBat()
@@ -126,33 +124,44 @@ func DoAtBat() {
 }
 
 func EndInning() {
-    // all this occurs at the end of an inning, BEFORE we increment the inning #
+    // all this occurs at the end of an inning, BEFORE we increment the inning # and frame
+    // (which we do at the beginning of StartInning)
     GameScript(2)
     // first 8 innings, always start the next inning (frame)
     if Inning.num < 9  {
         StartInning()
     }
-    // 9th inning, end of top half
-    if Inning.num == 9 && !Inning.TopBottom {
-        if Teams[1].score > Teams[0].score {
-            // no need for frame, home team won
-            GameOver()
-        } else {
-            // do top of the 9th
-            StartInning()
-        }
+
+    // ------------------
+    // 9th inning options
+    // ------------------
+
+    // end of top of 9th, home team ahead, game over
+    if Inning.num == 9 && !Inning.TopBottom && Teams[1].score > Teams[0].score {
+        fmt.Println("----> end of top of 9th, home team ahead, game over")
+        GameOver()
+    }
+    // end of top of 9th, home team NOT ahead, continue play
+    if Inning.num == 9 && !Inning.TopBottom && Teams[1].score < Teams[0].score {
+        fmt.Println("----> end of top of 9th, home team NOT ahead, continue play")
+        StartInning()
+    }
+    // end of bottom of 9th, home team ahead, game over
+    if Inning.num == 9 && Inning.TopBottom && Teams[1].score > Teams[0].score {
+        fmt.Println("----> end of bottom of 9th, home team ahead, game over")
+        GameOver()
+    }
+    // end of bottom of 9th, game tied, continue play
+    if Inning.num == 9 && Inning.TopBottom && Teams[1].score == Teams[0].score {
+        fmt.Println("----> end of bottom of 9th, game tied, continue play")
+        StartInning()
+    }
+    // end of bottom of 9th, away team ahead, game over
+    if Inning.num == 9 && Inning.TopBottom && Teams[1].score < Teams[0].score {
+        fmt.Println("----> end of bottom of 9th, away team ahead, game over")
+        GameOver()
     }
 
-    // bottom of the 9th
-    if Inning.num >= 9 && Inning.TopBottom {
-        if Teams[1].score != Teams[0].score {
-            // game over after 9 innings
-            GameOver()
-        } else {
-            // do extra innings
-            StartInning()
-        }
-    }
 }
 
 func DoPitch() {
@@ -195,19 +204,18 @@ func DoPitch() {
             // determine which hit type (param is # of bases in hit)
             r := GetRand()
             if r < .1 {
-                DoHit(4)
                 GameScript(8)
+                DoHit(4)
             } else if r >= .1 && r < .15 {
-                DoHit(3)
                 GameScript(9)
+                DoHit(3)
             } else if r >= .15 && r < .33 {
-                DoHit(2)
                 GameScript(10)
+                DoHit(2)
             } else {
-                DoHit(1)
                 GameScript(11)
+                DoHit(1)
             }
-            GameScript(6)
         } else {
             // he's out
             DoOut(false)
@@ -230,14 +238,114 @@ func AdvanceLineup() {
     }
 }
 
-func AdvanceRunners(bases int, pos float64 ) {
+func TryDoublePlay(pos float64) bool {
+    var dp bool = false
+    switch pos {
+        case 1:
+            switch BasesStatus() {
+                case "false|false|false":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                    dp = false
+                case "true|false|false":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                    dp = true
+                case "false|true|false":
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                    dp = false
+                case "false|false|true":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                    dp = false
+                case "true|true|false":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                    dp = true
+                case "true|false|true":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                    dp = true
+                case "false|true|true":
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = true
+                    dp = false
+                case "true|true|true":
+                    Inning.first = true
+                    Inning.second = true
+                    Inning.third = false
+                    dp = true
+            }
+        case 2:
+            dp = false
+        case 3:
+            switch BasesStatus() {
+                case "false|false|false":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                    dp = false
+                case "true|false|false":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = false
+                    dp = true
+                case "false|true|false":
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                    dp = false
+                case "false|false|true":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                    dp = false
+                case "true|true|false":
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = false
+                    dp = true
+                case "true|false|true":
+                    Inning.first = false
+                    Inning.second = false
+                    Inning.third = true
+                    dp = true
+                case "false|true|true":
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = true
+                    dp = false
+                case "true|true|true":
+                    Inning.first = false
+                    Inning.second = true
+                    Inning.third = true
+                    dp = true
+            }
+    }
+    return dp
+}
+
+func AdvanceRunners(bases int, pos float64) {
     // bases: # of bases of hit
     // pos: defensive position where ball was hit
+
+    var DoGameScript bool = true  // if it's a flyout and not a sac fly, then no runners advanced, so nothing to print
     switch bases {
         case -1: // out (sac fly)
             if pos >=6 && Inning.third {
                 Inning.third = false  // the other 2 baserunners stay the same
                 Teams[bti].score ++
+                GameScript(50)
+            } else {
+                DoGameScript = false
             }
         case 0: // walk
             switch BasesStatus() {
@@ -271,6 +379,7 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.third = true
                 case "true|true|true":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = true
                     Inning.second = true
                     Inning.third = true
@@ -295,17 +404,20 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.second = false
                     Inning.third = false
                     Teams[bti].score ++
+                    GameScript(50)
                 case "false|false|true":
                     Inning.first = true
                     Inning.second = false
                     Inning.third = false
                     Teams[bti].score ++
+                    GameScript(50)
                 case "true|true|false":
                     Inning.first = true
                     if pos == 7 || pos == 8 {
                         Inning.second = false
                         Inning.third = false
                         Teams[bti].score ++
+                        GameScript(50)
                     } else {
                         Inning.second = false
                         Inning.third = true
@@ -319,14 +431,17 @@ func AdvanceRunners(bases int, pos float64 ) {
                         Inning.second = true
                     }
                     Teams[bti].score ++
+                    GameScript(50)
                 case "false|true|true":
                     if pos == 7 || pos == 8 {
                         Teams[bti].score += 2
+                        GameScript(51)
                         Inning.first = true
                         Inning.second = false
                         Inning.third = false
                     } else {
                         Teams[bti].score ++
+                        GameScript(50)
                         Inning.first = true
                         Inning.second = false
                         Inning.third = true
@@ -334,11 +449,13 @@ func AdvanceRunners(bases int, pos float64 ) {
                 case "true|true|true":
                     if pos == 7 || pos == 8 {
                         Teams[bti].score += 2
+                        GameScript(51)
                         Inning.first = true
                         Inning.second = false
                         Inning.third = false
                     } else {
                         Teams[bti].score ++
+                        GameScript(50)
                         Inning.first = true
                         Inning.second = true
                         Inning.third = true
@@ -352,36 +469,43 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.third = false
                 case "true|false|false":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "false|true|false":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "false|false|true":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "true|true|false":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "true|false|true":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "false|true|true":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "true|true|true":
                     Teams[bti].score += 3
+                    GameScript(52)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
@@ -394,36 +518,43 @@ func AdvanceRunners(bases int, pos float64 ) {
                     Inning.third = true
                 case "true|false|false":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "false|true|false":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "false|false|true":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "true|true|false":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "true|false|true":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "false|true|true":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
                 case "true|true|true":
                     Teams[bti].score += 3
+                    GameScript(52)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = true
@@ -432,47 +563,57 @@ func AdvanceRunners(bases int, pos float64 ) {
             switch BasesStatus() {
                 case "false|false|false":
                     Teams[bti].score ++
+                    GameScript(50)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|false|false":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "false|true|false":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "false|false|true":
                     Teams[bti].score += 2
+                    GameScript(51)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|true|false":
                     Teams[bti].score += 3
+                    GameScript(52)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|false|true":
                     Teams[bti].score += 3
+                    GameScript(52)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "false|true|true":
                     Teams[bti].score += 3
+                    GameScript(52)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
                 case "true|true|true":
                     Teams[bti].score += 4
+                    GameScript(53)
                     Inning.first = false
                     Inning.second = false
                     Inning.third = false
             }
     }
-    GameScript(6)
+    if DoGameScript {
+        GameScript(6)
+    }
 }
 
 func BasesStatus() string {
@@ -482,14 +623,21 @@ func BasesStatus() string {
 func DoOut(strikeout bool) {
     if !strikeout {
         pos := math.Floor(GetRand()*9) +1
+        GameScript(int(pos + 30))
         if pos >=7 {
             AdvanceRunners(-1, pos)
+        } else {
+            if Inning.outs <2 {
+                if GetRand() <.85 && TryDoublePlay(pos) {
+                    Inning.outs ++  // this will only be the EXTRA out
+                    GameScript(55)
+                }
+            }
         }
-        GameScript(int(pos + 30))
     }
     Count.strikes = 0
     Count.balls = 0
-    Inning.outs ++
+    Inning.outs ++  // always increment the regular out
     AdvanceLineup()
     if Inning.outs == 3 {
         EndInning()
@@ -566,32 +714,16 @@ func GameScript(id int) {
             }
         case 2:
             // end of inning
-            script += "End of "
-            if !Inning.TopBottom {
-                script += "top"
-            } else {
-                script += "bottom"
-            }
-            script += fmt.Sprintf(" of %d", Inning.num)
-            switch Inning.num {
-                case 1:
-                    script += "st"
-                case 2:
-                    script += "nd"
-                case 3:
-                    script += "rd"
-                default:
-                    script += "th"
-            }
+            script = "End of " + InningScript()
             script += ". " + ScoreScript()
             script += "\n" + strings.Repeat("-", RepeatChars) + "\n" + strings.Repeat("-", RepeatChars) + "\n\n"
         case 3:
             // each at bat
-            script += strings.Repeat("-", RepeatChars) + "\n"
+            script = strings.Repeat("-", RepeatChars) + "\n"
             if !Inning.LeadOff {
                 script += "Batting"
             } else {
-                script += "Leading off"
+                script += "Leading off in the " + InningScript()
             }
             script += fmt.Sprintf(" for %s, %s %s %s", Teams[bti].short, Teams[bti].batters[Teams[bti].AtBatNum].position, Teams[bti].batters[Teams[bti].AtBatNum].FirstName, Teams[bti].batters[Teams[bti].AtBatNum].LastName)
 
@@ -600,78 +732,110 @@ func GameScript(id int) {
             // after runners advancing
             switch BasesStatus() {
                 case "true|false|false":
-                    script += "A runner at first base"
+                    script = "A runner at first base"
                 case "false|true|false":
-                    script += "A runner at second base"
+                    script = "A runner at second base"
                 case "false|false|true":
-                    script += "A runner at third base"
+                    script = "A runner at third base"
                 case "true|true|false":
-                    script += "Runners at first and second"
+                    script = "Runners at first and second"
                 case "true|false|true":
-                    script += "Runners at first and third"
+                    script = "Runners at first and third"
                 case "false|true|true":
-                    script += "Runners at second and third"
+                    script = "Runners at second and third"
                 case "true|true|true":
-                    script += "Bases loaded"
+                    script = "Bases loaded"
             }
         case 7:
             // game over
-            script += "Game over. Final " + ScoreScript()
+            script = "Game over. Final score: " + ScoreScript()
         case 8:
             // home run
-            script += "Homerun to " + RandomField()
+            script = "Homerun to " + RandomField()
         case 9:
             // triple
-            script += "Triple to " + RandomField()
+            script = "Triple to " + RandomField()
         case 10:
             // double
-            script += "Double to " + RandomField()
+            script = "Double to " + RandomField()
         case 11:
             // single
-            script += "Single to " + RandomField()
+            script = "Single to " + RandomField()
         case 12:
             // ball
-            script += "Ball. " + CountScript()
+            b := "Ball "
+            r := GetRand()
+            if r <.125 {
+                b += "high and inside"
+            } else if r >=.125 && r <.25 {
+                b += "high"
+            } else if r >=.25 && r <.375 {
+                b += "high and outside"
+            } else if r >=.375 && r <.5 {
+                b += "inside"
+            } else if r >=.5 && r <.625 {
+                b += "outside"
+            } else if r >=.625 && r <.75 {
+                b += "low and inside"
+            } else if r >=.75 && r <.825 {
+                b += "low"
+            } else {
+                b += "low and outside"
+            }
+            script = b + ". " + CountScript()
         case 13:
             // swinging strike
-            script += "Swing and a miss. " + CountScript()
+            script = "Swing and a miss. " + CountScript()
         case 14:
             // called strike
-            script += "Called strike. " + CountScript()
+            script = "Called strike. " + CountScript()
         case 15:
             // foul ball
-            script += "Foul ball. " + CountScript()
+            script = "Foul ball. " + CountScript()
 
         // these are all outs
         case 31:
-            script += "Groundout to the pitcher."
+            script = "Groundout to the pitcher."
         case 32:
-            script += "Popout to the catcher."
+            script = "Popout to the catcher."
         case 33:
-            script += "Groundout to first."
+            script = "Groundout to first."
         case 34:
-            script += "Groundout to second."
+            script = "Groundout to second."
         case 35:
-            script += "Groundout to third."
+            script = "Groundout to third."
         case 36:
-            script += "Groundout to the shortstop."
+            script = "Groundout to the shortstop."
         case 37:
-            script += "Flyout to left."
+            script = "Flyout to left."
         case 38:
-            script += "Flyout to center."
+            script = "Flyout to center."
         case 39:
-            script += "Flyout to right."
+            script = "Flyout to right."
         case 40:
-            script += fmt.Sprintf("%d out", Inning.outs)
+            script = fmt.Sprintf("%d out", Inning.outs)
             if Inning.outs == 2 {
                 script += "s"
             }
+
+        // run(s) score(s)
+        case 50:
+            script = "1 run scores. " + ScoreScript()
+        case 51:
+            script = "2 runs score. " + ScoreScript()
+        case 52:
+            script = "3 runs score. " + ScoreScript()
+        case 53:
+            script = "4 runs score. " + ScoreScript()
+
+        case 55:
+            script = "Double play"
     }
     fmt.Println(script)
 }
 
 func ScoreScript() string {
-    return fmt.Sprintf("Score: %s %d, %s %d", Teams[0].short, Teams[0].score, Teams[1].short, Teams[1].score)
+    return fmt.Sprintf("%s %d, %s %d", Teams[0].short, Teams[0].score, Teams[1].short, Teams[1].score)
 }
 
 func CountScript() string {
@@ -699,4 +863,25 @@ func RandomField () string {
         field = "right field"
     }
     return field
+}
+
+func InningScript () string {
+    var is string = ""
+    if Inning.TopBottom {
+        is += "top"
+    } else {
+        is += "bottom"
+    }
+    is += fmt.Sprintf(" of the %d", Inning.num)
+    switch Inning.num {
+        case 1:
+            is += "st"
+        case 2:
+            is += "nd"
+        case 3:
+            is += "rd"
+        default:
+            is += "th"
+    }
+    return is
 }
