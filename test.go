@@ -8,3 +8,4 @@ import "runtime"
 func main () {
 	fmt.Println(color.Red + "hey")
 }
+

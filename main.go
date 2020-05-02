@@ -130,42 +130,67 @@ func EndInning() {
     // first 8 innings, always start the next inning (frame)
     if Inning.num < 9  {
         StartInning()
+    } else if Inning.num == 9 {
+        DoNinthInning()
+    } else {
+        DoExtraInnings()
     }
+}
 
+func DoNinthInning() {
     // ------------------
     // 9th inning options
     // ------------------
 
+    // (we flip the frame here, because it got flipped at the beginning of the inning)
+    var TempFrame bool = !Inning.TopBottom
+
     // end of top of 9th, home team ahead, game over
-    if Inning.num == 9 && !Inning.TopBottom && Teams[1].score > Teams[0].score {
-        fmt.Println("----> end of top of 9th, home team ahead, game over")
+    if Inning.num == 9 && !TempFrame && Teams[1].score > Teams[0].score {
         GameOver()
     }
     // end of top of 9th, home team NOT ahead, continue play
-    if Inning.num == 9 && !Inning.TopBottom && Teams[1].score < Teams[0].score {
-        fmt.Println("----> end of top of 9th, home team NOT ahead, continue play")
+    if Inning.num == 9 && !TempFrame && Teams[1].score < Teams[0].score {
         StartInning()
     }
     // end of bottom of 9th, home team ahead, game over
-    if Inning.num == 9 && Inning.TopBottom && Teams[1].score > Teams[0].score {
-        fmt.Println("----> end of bottom of 9th, home team ahead, game over")
+    if Inning.num == 9 && TempFrame && Teams[1].score > Teams[0].score {
         GameOver()
     }
     // end of bottom of 9th, game tied, continue play
-    if Inning.num == 9 && Inning.TopBottom && Teams[1].score == Teams[0].score {
-        fmt.Println("----> end of bottom of 9th, game tied, continue play")
+    if Inning.num == 9 && TempFrame && Teams[1].score == Teams[0].score {
         StartInning()
     }
     // end of bottom of 9th, away team ahead, game over
-    if Inning.num == 9 && Inning.TopBottom && Teams[1].score < Teams[0].score {
-        fmt.Println("----> end of bottom of 9th, away team ahead, game over")
+    if Inning.num == 9 && TempFrame && Teams[1].score < Teams[0].score {
         GameOver()
     }
+}
 
+func DoExtraInnings() {
+    // ---------------------
+    // extra innings options
+    // ---------------------
+
+    // (we flip the frame here, because it got flipped at the beginning of the inning)
+    var TempFrame bool = !Inning.TopBottom
+
+    // end of top of frame, always keep on playing
+    if Inning.num > 9 && !TempFrame {
+        StartInning()
+    }
+    // end of bottom of frame, game tied, continue playing
+    if Inning.num > 9 && TempFrame && Teams[1].score == Teams[0].score {
+        StartInning()
+    }
+    // end of bottom of frame, one team leads, game over
+    if Inning.num > 9 && TempFrame && Teams[1].score != Teams[0].score {
+        GameOver()
+    }
 }
 
 func DoPitch() {
-    if GetRand() <.75 {
+    if GetRand() < .75 {
         // ball or strike
         if GetRand() < .5 {
             // ball
@@ -180,12 +205,12 @@ func DoPitch() {
         } else {
             // strike
             s := GetRand()
-            if ! (Count.strikes == 2 && s >=.667) {
+            if ! (Count.strikes == 2 && s >= .667) {
                 // only add strike if it's not Strike 2 now and it's not a foul ball
                 Count.strikes ++
-                if s <.333 {
+                if s < .333 {
                     GameScript(13)
-                } else if s >=.333 && s <.667 {
+                } else if s >= .333 && s < .667 {
                     GameScript(14)
                 } else {
                     GameScript(15)
@@ -340,7 +365,7 @@ func AdvanceRunners(bases int, pos float64) {
     var DoGameScript bool = true  // if it's a flyout and not a sac fly, then no runners advanced, so nothing to print
     switch bases {
         case -1: // out (sac fly)
-            if pos >=6 && Inning.third {
+            if pos >= 6 && Inning.third && Inning.outs < 3 {
                 Inning.third = false  // the other 2 baserunners stay the same
                 Teams[bti].score ++
                 GameScript(50)
@@ -624,11 +649,11 @@ func DoOut(strikeout bool) {
     if !strikeout {
         pos := math.Floor(GetRand()*9) +1
         GameScript(int(pos + 30))
-        if pos >=7 {
+        if pos >= 7 {
             AdvanceRunners(-1, pos)
         } else {
-            if Inning.outs <2 {
-                if GetRand() <.85 && TryDoublePlay(pos) {
+            if Inning.outs < 2 {
+                if GetRand() < .85 && TryDoublePlay(pos) {
                     Inning.outs ++  // this will only be the EXTRA out
                     GameScript(55)
                 }
@@ -753,8 +778,13 @@ func GameScript(id int) {
             // home run
             script = "Homerun to " + RandomField()
         case 9:
-            // triple
-            script = "Triple to " + RandomField()
+            // triple (can't use RandomField here, because a triple will rarely not be in right field)
+            script = "Triple to "
+            if GetRand() < .5 {
+                script += "right center"
+            } else {
+                script += "right field"
+            }
         case 10:
             // double
             script = "Double to " + RandomField()
@@ -765,19 +795,19 @@ func GameScript(id int) {
             // ball
             b := "Ball "
             r := GetRand()
-            if r <.125 {
+            if r < .125 {
                 b += "high and inside"
-            } else if r >=.125 && r <.25 {
+            } else if r >= .125 && r < .25 {
                 b += "high"
-            } else if r >=.25 && r <.375 {
+            } else if r >= .25 && r < .375 {
                 b += "high and outside"
-            } else if r >=.375 && r <.5 {
+            } else if r >= .375 && r < .5 {
                 b += "inside"
-            } else if r >=.5 && r <.625 {
+            } else if r >= .5 && r < .625 {
                 b += "outside"
-            } else if r >=.625 && r <.75 {
+            } else if r >= .625 && r < .75 {
                 b += "low and inside"
-            } else if r >=.75 && r <.825 {
+            } else if r >= .75 && r < .825 {
                 b += "low"
             } else {
                 b += "low and outside"
@@ -839,7 +869,7 @@ func ScoreScript() string {
 }
 
 func CountScript() string {
-    if Count.balls == 4{
+    if Count.balls == 4 {
         return "Walk"
     } else if Count.strikes == 3 {
         return "Strikeout"
@@ -851,13 +881,13 @@ func CountScript() string {
 func RandomField () string {
     var field string = ""
     r := GetRand()
-    if r <.2 {
+    if r < .2 {
         field = "left field"
-    } else if r >=.2 && r <.4 {
+    } else if r >= .2 && r < .4 {
         field = "left center"
-    } else if r >=.4 && r <.6 {
+    } else if r >= .4 && r < .6 {
         field = "center field"
-    } else if r >=.6 && r <.8 {
+    } else if r >= .6 && r < .8 {
         field = "right center"
     } else {
         field = "right field"
