@@ -16,11 +16,14 @@ var Teams [2]team
 var bti int = 0  // Batting Team Index (too long to write full name each time)
 var Inning inning
 var Count count
+
 // we allow up to 5 errors per game (both teams combined)
 // randomly, an error will occur, until this # is reached
-var MaxErrors float64 = math.Floor(GetRand()*5)
-var ErrorCount float64 = 0
-var RepeatChars int = 40  // for inning and other --------- separator
+var MaxErrors float64 = math.Floor(GetRand()*6)
+var ErrorCount int = 0
+
+// for inning and other --------- separator
+var RepeatChars int = 40
 
 type inning struct {
     num int
@@ -190,9 +193,9 @@ func DoExtraInnings() {
 }
 
 func DoPitch() {
-    if GetRand() < .75 {
+    if GetRand() < 0.75 {
         // ball or strike
-        if GetRand() < .5 {
+        if GetRand() < 0.5 {
             // ball
             Count.balls ++
             GameScript(12)
@@ -200,17 +203,18 @@ func DoPitch() {
                 // walk
                 Count.balls = 0
                 AdvanceRunners(0, -1)
+                AdvanceLineup()
                 DoAtBat()
             }
         } else {
             // strike
             s := GetRand()
-            if ! (Count.strikes == 2 && s >= .667) {
+            if ! (Count.strikes == 2 && s >= 0.667) {
                 // only add strike if it's not Strike 2 now and it's not a foul ball
                 Count.strikes ++
-                if s < .333 {
+                if s < 0.333 {
                     GameScript(13)
-                } else if s >= .333 && s < .667 {
+                } else if s >= 0.333 && s < 0.667 {
                     GameScript(14)
                 } else {
                     GameScript(15)
@@ -228,13 +232,13 @@ func DoPitch() {
             // he's on base
             // determine which hit type (param is # of bases in hit)
             r := GetRand()
-            if r < .1 {
+            if r < 0.1 {
                 GameScript(8)
                 DoHit(4)
-            } else if r >= .1 && r < .15 {
+            } else if r >= 0.1 && r < 0.15 {
                 GameScript(9)
                 DoHit(3)
-            } else if r >= .15 && r < .33 {
+            } else if r >= 0.15 && r < 0.33 {
                 GameScript(10)
                 DoHit(2)
             } else {
@@ -242,15 +246,32 @@ func DoPitch() {
                 DoHit(1)
             }
         } else {
-            // he's out
-            DoOut(false)
+            if !TryError() {
+                // he's out
+                DoOut(false)
+            }
         }
     }
 }
 
+func TryError() bool {
+    error := false
+    if ErrorCount < int(MaxErrors) {
+        // try throwing an error
+        // (this is based on 80 atbats per game: 27 min per team, plus average 3 walks and 10 hits)
+        if GetRand() < (MaxErrors / 80) {
+            GameScript(56)
+            error = true
+            ErrorCount ++
+            AdvanceRunners(-2, -1)
+        }
+    }
+    return error
+}
+
 func DoHit(bases int) {
     // most hits are out of the infield, so we assume them here
-    outfield := math.Floor(GetRand()*3) + 6  // left, center, or right field (nfk"m for runner scoring from second)
+    outfield := int(math.Floor(GetRand()*3)) + 6  // left, center, or right field (nfk"m for runner scoring from second)
     AdvanceRunners(bases, outfield)
     AdvanceLineup()
     DoAtBat()
@@ -263,7 +284,7 @@ func AdvanceLineup() {
     }
 }
 
-func TryDoublePlay(pos float64) bool {
+func TryDoublePlay(pos int) bool {
     var dp bool = false
     switch pos {
         case 1:
@@ -358,12 +379,52 @@ func TryDoublePlay(pos float64) bool {
     return dp
 }
 
-func AdvanceRunners(bases int, pos float64) {
+func AdvanceRunners(bases int, pos int) {
     // bases: # of bases of hit
     // pos: defensive position where ball was hit
 
     var DoGameScript bool = true  // if it's a flyout and not a sac fly, then no runners advanced, so nothing to print
     switch bases {
+        case -2: // error (assumed one base advance per runner, plus batter safe at first)
+            switch BasesStatus() {
+                case "false|false|false":
+                    Inning.first = true
+                    Inning.second = false
+                    Inning.third = false
+                case "true|false|false":
+                    Inning.first = true
+                    Inning.second = true
+                    Inning.third = false
+                case "false|true|false":
+                    Inning.first = true
+                    Inning.second = false
+                    Inning.third = true
+                case "false|false|true":
+                    Inning.first = true
+                    Inning.second = false
+                    Inning.third = false
+                    Teams[bti].score ++
+                case "true|true|false":
+                    Inning.first = true
+                    Inning.second = true
+                    Inning.third = true
+                case "true|false|true":
+                    Inning.first = true
+                    Inning.second = true
+                    Inning.third = false
+                    Teams[bti].score ++
+                case "false|true|true":
+                    Inning.first = true
+                    Inning.second = false
+                    Inning.third = true
+                    Teams[bti].score ++
+                case "true|true|true":
+                    Teams[bti].score ++
+                    GameScript(50)
+                    Inning.first = true
+                    Inning.second = true
+                    Inning.third = true
+            }
         case -1: // out (sac fly)
             if pos >= 6 && Inning.third && Inning.outs < 3 {
                 Inning.third = false  // the other 2 baserunners stay the same
@@ -647,13 +708,34 @@ func BasesStatus() string {
 
 func DoOut(strikeout bool) {
     if !strikeout {
-        pos := math.Floor(GetRand()*9) +1
-        GameScript(int(pos + 30))
+        r := GetRand()
+        pos := 0
+        // much less likelihood that the pitcher or catcher will do the putout, so we give them a smaller probabililty
+        if r < 0.08 {
+            pos = 1
+        } else if r > 0.08 && r < 0.16 {
+            pos = 2
+        } else if r >= 0.16 && r < 0.28 {
+            pos = 3
+        } else if r >= 0.28 && r < 0.4 {
+            pos = 4
+        } else if r >= 0.4 && r < 0.52 {
+            pos = 5
+        } else if r >= 0.52 && r < 0.64 {
+            pos = 6
+        } else if r >= 0.64 && r < 0.76 {
+            pos = 7
+        } else if r >= 0.76 && r < 0.88 {
+            pos = 8
+        } else {
+            pos = 9
+        }
+        GameScript(pos + 30)
         if pos >= 7 {
             AdvanceRunners(-1, pos)
         } else {
             if Inning.outs < 2 {
-                if GetRand() < .85 && TryDoublePlay(pos) {
+                if GetRand() < 0.85 && TryDoublePlay(pos) {
                     Inning.outs ++  // this will only be the EXTRA out
                     GameScript(55)
                 }
@@ -780,7 +862,7 @@ func GameScript(id int) {
         case 9:
             // triple (can't use RandomField here, because a triple will rarely not be in right field)
             script = "Triple to "
-            if GetRand() < .5 {
+            if GetRand() < 0.5 {
                 script += "right center"
             } else {
                 script += "right field"
@@ -795,19 +877,19 @@ func GameScript(id int) {
             // ball
             b := "Ball "
             r := GetRand()
-            if r < .125 {
+            if r < 0.125 {
                 b += "high and inside"
-            } else if r >= .125 && r < .25 {
+            } else if r >= 0.125 && r < 0.25 {
                 b += "high"
-            } else if r >= .25 && r < .375 {
+            } else if r >= 0.25 && r < 0.375 {
                 b += "high and outside"
-            } else if r >= .375 && r < .5 {
+            } else if r >= 0.375 && r < 0.5 {
                 b += "inside"
-            } else if r >= .5 && r < .625 {
+            } else if r >= 0.5 && r < 0.625 {
                 b += "outside"
-            } else if r >= .625 && r < .75 {
+            } else if r >= 0.625 && r < 0.75 {
                 b += "low and inside"
-            } else if r >= .75 && r < .825 {
+            } else if r >= 0.75 && r < 0.825 {
                 b += "low"
             } else {
                 b += "low and outside"
@@ -825,23 +907,23 @@ func GameScript(id int) {
 
         // these are all outs
         case 31:
-            script = "Groundout to the pitcher."
+            script = "Groundout to the pitcher"
         case 32:
-            script = "Popout to the catcher."
+            script = "Popout to the catcher"
         case 33:
-            script = "Groundout to first."
+            script = "Groundout to first"
         case 34:
-            script = "Groundout to second."
+            script = "Groundout to second"
         case 35:
-            script = "Groundout to third."
+            script = "Groundout to third"
         case 36:
-            script = "Groundout to the shortstop."
+            script = "Groundout to short"
         case 37:
-            script = "Flyout to left."
+            script = "Flyout to left"
         case 38:
-            script = "Flyout to center."
+            script = "Flyout to center"
         case 39:
-            script = "Flyout to right."
+            script = "Flyout to right"
         case 40:
             script = fmt.Sprintf("%d out", Inning.outs)
             if Inning.outs == 2 {
@@ -860,6 +942,8 @@ func GameScript(id int) {
 
         case 55:
             script = "Double play"
+        case 56:
+            script = "Error"
     }
     fmt.Println(script)
 }
@@ -881,13 +965,13 @@ func CountScript() string {
 func RandomField () string {
     var field string = ""
     r := GetRand()
-    if r < .2 {
+    if r < 0.2 {
         field = "left field"
-    } else if r >= .2 && r < .4 {
+    } else if r >= 0.2 && r < 0.4 {
         field = "left center"
-    } else if r >= .4 && r < .6 {
+    } else if r >= 0.4 && r < 0.6 {
         field = "center field"
-    } else if r >= .6 && r < .8 {
+    } else if r >= 0.6 && r < 0.8 {
         field = "right center"
     } else {
         field = "right field"
