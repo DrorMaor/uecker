@@ -2,7 +2,6 @@ package main
 
 import (
     "fmt"
-    "log"
     "bufio"
     "os"
     "strings"
@@ -56,20 +55,27 @@ type team struct {
     pitcher int // # in the pitchers list
     score int
     AtBatNum int
+    Boxscore boxscore
 }
 
 type batter struct {
     position string
-	  FirstName string
+	FirstName string
     LastName string
     AVG float64
 }
 
 type pitcher struct {
     position string
-	  FirstName string
+	FirstName string
     LastName string
     ERA float64
+}
+
+type boxscore struct {
+    inning []int
+    H int
+    E int
 }
 
 func main() {
@@ -89,10 +95,31 @@ func PlayBall() {
 
 func GameOver() {
     GameScript(7)
+    DrawBoxscore()
     f, _ := os.Create("GameScript")
     f.WriteString(FullGameScript)
     f.Close()
     os.Exit(-1)
+}
+
+func DrawBoxscore() {
+    box := "\n"
+    // this is the heading of thet boxscore
+    box += "    "
+    inns := len(Teams[0].Boxscore.inning)
+    for i := 1; i <= inns; i++ {
+        box += fmt.Sprintf("%d ", i)
+    }
+    box += " R H E \n"
+    // now both teams' #s
+    for _, team := range Teams {
+        box += team.short + " "
+        for i := 0; i < inns; i++ {
+            box += fmt.Sprintf("%d ", team.Boxscore.inning[i])
+        }
+        box += fmt.Sprintf(" %d %d %d\n", team.score, team.Boxscore.H, team.Boxscore.E)
+    }
+    FullGameScript += box + "\n"
 }
 
 func StartInning() {
@@ -108,7 +135,7 @@ func StartInning() {
         bti = 1
     }
     Inning.TopBottom = !Inning.TopBottom
-
+    Teams[bti].Boxscore.inning = append(Teams[bti].Boxscore.inning, 0)
     for {
         DoAtBat()
         if Inning.outs == 3 {
@@ -269,6 +296,7 @@ func TryError() bool {
         if GetRand() < (MaxErrors / 80) {
             GameScript(56)
             error = true
+            Teams[bti].Boxscore.E ++
             ErrorCount ++
             AdvanceRunners(-2, -1)
         }
@@ -281,6 +309,7 @@ func DoHit(bases int) {
     outfield := int(math.Floor(GetRand()*3)) + 7  // left, center, or right field (nfk"m for runner scoring from second)
     AdvanceRunners(bases, outfield)
     AdvanceLineup()
+    Teams[bti].Boxscore.H ++
     DoAtBat()
 }
 
@@ -388,9 +417,16 @@ func TryDoublePlay(pos int) bool {
 
 func IncrementScore(runs int, bases int) {
     // bases is used to determine if it's a walkoff
-
-    Teams[bti].score += runs
-    GameScript(50 + runs)
+    if bases < 4 && Inning.num == 9 && Inning.TopBottom && (Teams[1].score - Teams[0].score < runs - 1) {
+        Teams[bti].score ++
+        GameScript(51)
+        Inning.Walkoff = true
+        GameOver()
+    } else {
+        Teams[bti].score += runs
+        GameScript(50 + runs)
+    }
+    Teams[bti].Boxscore.inning[Inning.num-1] += runs
 }
 
 func AdvanceRunners(bases int, pos int) {
@@ -675,10 +711,7 @@ func GetRand() float64 {
 }
 
 func GetLineup(FileName string, Team team ) team {
-    file, err := os.Open(FileName)
-	if err != nil {
-		log.Fatalf("failed opening file: %s", err)
-	}
+    file, _ := os.Open(FileName)
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
 	var txtLines []string
@@ -724,9 +757,9 @@ func GameScript(id int) {
             for _, team := range Teams {
                 script += fmt.Sprintf("%s's lineup:\n", team.city)
                 for _, batter := range team.batters {
-                    script += fmt.Sprintf("%s, %s %s\n", batter.position, batter.FirstName, batter.LastName)
+                    script += fmt.Sprintf("%s, %s %s (AVG: %.3f)\n", batter.position, batter.FirstName, batter.LastName, batter.AVG)
                 }
-                script += "\n"
+                script += fmt.Sprintf("Starting pitcher: %s %s (ERA: %.2f)\n\n", team.pitchers[0].FirstName, team.pitchers[0].LastName, team.pitchers[0].ERA)
             }
         case 2:
             // end of inning
