@@ -254,19 +254,19 @@ func DoPitch() {
                     GameScript(13, "Called string")
                 } else {
                     f := GetRand()
-                    fbText := ""
+                    fbText := "Foul ball "
                     if f < 0.2 {
-                        fbText = "behind the plate"
+                        fbText += "behind the plate"
                     } else if f >= 0.2 && f < 0.4 {
-                        fbText = "third base side"
+                        fbText += "third base side"
                     } else if f >= 0.4 && f < 0.6 {
-                        fbText = "first base side"
+                        fbText += "first base side"
                     } else if f >= 0.6 && f < 0.8 {
-                        fbText = "to left field"
+                        fbText += "to left field"
                     } else  {
-                        fbText = "to right field"
+                        fbText += "to right field"
                     }
-                    GameScript(13, "Foul ball " + fbText)
+                    GameScript(13, fbText)
                 }
 
                 if Count.strikes == 3 {
@@ -280,28 +280,23 @@ func DoPitch() {
         if GetRand() < Teams[bti].batters[Teams[bti].AtBatNum].AVG {
             // he's on base
             // determine which hit type (param is # of bases in hit)
-            script := ""
             r := GetRand()
             if r < 0.1 {
-                script = "Homerun to " + RandomField()
-                DoHit(4)
+                DoHit(4, "Homerun to " + RandomField())
             } else if r >= 0.1 && r < 0.15 {
                 // triple (can't use RandomField here, because a triple will rarely NOT be in right field)
-                script = "Triple to "
+                tText := "Triple to "
                 if GetRand() < 0.5 {
-                    script += "right center"
+                    tText += "right center"
                 } else {
-                    script += "right field"
+                    tText += "right field"
                 }
-                DoHit(3)
+                DoHit(3, tText)
             } else if r >= 0.15 && r < 0.33 {
-                script = "Double to " + RandomField()
-                DoHit(2)
+                DoHit(2, "Double to " + RandomField())
             } else {
-                script = "Single to " + RandomField()
-                DoHit(1)
+                DoHit(1, "Single to " + RandomField())
             }
-            GameScript(8, script)
         } else {
             if !TryError() {
                 // he's out
@@ -319,15 +314,25 @@ func TryError() bool {
         if GetRand() < (MaxErrors / 80) {
             GameScript(18, "")
             error = true
-            Teams[bti].Boxscore.E ++
+            // it's the NON batting team that gets charged with the error
+            if bti == 0 {
+                Teams[1].Boxscore.E ++
+            } else {
+                Teams[0].Boxscore.E ++
+            }
+
             ErrorCount ++
             AdvanceRunners(-2, -1)
+            AdvanceLineup()
+            DoAtBat()
         }
     }
     return error
 }
 
-func DoHit(bases int) {
+func DoHit(bases int, text string) {
+    GameScript(8, text)
+
     // most hits are out of the infield, so we assume them here
     outfield := int(math.Floor(GetRand()*3)) + 7  // left, center, or right field (nfk"m for runner scoring from second)
     AdvanceRunners(bases, outfield)
@@ -791,7 +796,7 @@ func DoOut(strikeout bool) {
     if Inning.outs == 3 || Inning.Walkoff {
         EndInning()
     } else {
-        GameScript(14, "")
+        GameScript(15, "")
         DoAtBat()
     }
 }
@@ -890,7 +895,7 @@ func GameScript(id int, text string) {
             // game over
             script = "Game over. Final score: " + ScoreScript()
         case 8:
-            // hit`
+            // hit
             script = text
         case 12:
             // ball
@@ -933,8 +938,12 @@ func GameScript(id int, text string) {
             // run(s) score(s)
             script = text + ". " + ScoreScript()
         case 18:
-            // error
-            script = "Error"
+            // error (the text is in no way a reflection on which player caused the error, it's just a random position)
+            tPos := Teams[0].batters[int(math.Floor(GetRand()*9)) + 1].position
+            if tPos == "DH" {
+                tPos = "P"
+            }
+            script = "Error on " + tPos
     }
     //fmt.Println(script)
     FullGameScript += script + "\n"
