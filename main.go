@@ -37,8 +37,6 @@ type inning struct {
     first bool
     second bool
     third bool
-    // we need this T/F value if it's a walkoff win, so that will end the inning & game
-    Walkoff bool
 }
 
 type count struct {
@@ -471,17 +469,9 @@ func TryDoublePlay(pos int) string {
 }
 
 func IncrementScore(runs int) {
-    // bases is used to determine if it's a walkoff
+    var walkoff bool = false
+    // if Inning.num == 9 && Inning.TopBottom &&
 
-    /*
-    if bases < 4 && Inning.num == 9 && Inning.TopBottom && (Teams[1].score - Teams[0].score < runs - 1) {
-        Teams[bti].score ++
-        Teams[bti].Boxscore.inn[Inning.num-1] ++
-        GameScript(17, "1 run scores")
-        Inning.Walkoff = true
-        GameOver()
-    } else {
-    */
         Teams[bti].score += runs
         rText := ""
         switch (runs) {
@@ -492,6 +482,9 @@ func IncrementScore(runs int) {
         }
         Teams[bti].Boxscore.inn[Inning.num-1] += runs
         GameScript(17, rText)
+        if walkoff {
+            GameOver()
+        }
     //}
 }
 
@@ -541,7 +534,7 @@ func AdvanceRunners(bases int, pos int) {
                     Inning.third = true
             }
         case -1: // out (sac fly)
-            if pos >= 7 && Inning.third && Inning.outs < 3 {
+            if pos >= 7 && Inning.third && Inning.outs < 2 {
                 Inning.third = false  // the other 2 baserunners stay the same
                 IncrementScore(1)
             } else {
