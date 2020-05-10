@@ -61,14 +61,23 @@ type team struct {
 }
 
 type batter struct {
-    position string
+    pos string
 	FirstName string
     LastName string
+    BatterHitsPct batterHitsPct
     AVG float64
 }
 
+type batterHitsPct struct {
+    // this %age will be used for the random determining what hit they get
+    // (it's computed from the # of HR's they hit divided by # of AtBats)
+    DBL float64
+    TPL float64
+    HR float64
+}
+
 type pitcher struct {
-    position string
+    pos string
 	FirstName string
     LastName string
     ERA float64
@@ -97,7 +106,7 @@ func PlayBall() {
 
 func GameOver() {
     GameScript(7, "")
-    DrawBoxscore()
+    //DrawBoxscore()
     f, _ := os.Create("GameScript")
     f.WriteString(FullGameScript)
     f.Close()
@@ -251,7 +260,13 @@ func DoPitch() {
                 if s < 0.333 {
                     GameScript(13, "Swing and a miss")
                 } else if s >= 0.333 && s < 0.667 {
-                    GameScript(13, "Called string")
+                    tCorner := ""
+                    if GetRand() < 0.5 {
+                        tCorner = "inside"
+                    } else {
+                        tCorner = "outside"
+                    }
+                    GameScript(13, "Called strike on the " + tCorner + " corner")
                 } else {
                     f := GetRand()
                     fbText := "Foul ball "
@@ -277,13 +292,14 @@ func DoPitch() {
     } else {
         // hit in play
         // determine if it's a hit or out
-        if GetRand() < Teams[bti].batters[Teams[bti].AtBatNum].AVG {
+        CurrBtr := Teams[bti].batters[Teams[bti].AtBatNum]
+        if GetRand() < CurrBtr.AVG {
             // he's on base
             // determine which hit type (param is # of bases in hit)
             r := GetRand()
-            if r < 0.1 {
+            if r < CurrBtr.BatterHitsPct.HR {
                 DoHit(4, "Homerun to " + RandomField())
-            } else if r >= 0.1 && r < 0.15 {
+            } else if r >= CurrBtr.BatterHitsPct.HR && r < (CurrBtr.BatterHitsPct.HR + CurrBtr.BatterHitsPct.TPL) {
                 // triple (can't use RandomField here, because a triple will rarely NOT be in right field)
                 tText := "Triple to "
                 if GetRand() < 0.5 {
@@ -292,7 +308,7 @@ func DoPitch() {
                     tText += "right field"
                 }
                 DoHit(3, tText)
-            } else if r >= 0.15 && r < 0.33 {
+            } else if r >= (CurrBtr.BatterHitsPct.HR + CurrBtr.BatterHitsPct.TPL) && r < (CurrBtr.BatterHitsPct.HR + CurrBtr.BatterHitsPct.TPL + CurrBtr.BatterHitsPct.DBL) {
                 DoHit(2, "Double to " + RandomField())
             } else {
                 DoHit(1, "Single to " + RandomField())
@@ -494,12 +510,16 @@ func TryDoublePlay(pos int) string {
 
 func IncrementScore(runs int, bases int) {
     // bases is used to determine if it's a walkoff
+
+    /*
     if bases < 4 && Inning.num == 9 && Inning.TopBottom && (Teams[1].score - Teams[0].score < runs - 1) {
         Teams[bti].score ++
+        Teams[bti].Boxscore.inning[Inning.num-1] ++
         GameScript(17, "1 run scores")
         Inning.Walkoff = true
         GameOver()
     } else {
+    */
         Teams[bti].score += runs
         rText := ""
         switch (runs) {
@@ -508,9 +528,9 @@ func IncrementScore(runs int, bases int) {
             default:
                 rText = strconv.Itoa(runs) + " runs score"
         }
+        Teams[bti].Boxscore.inning[Inning.num-1] += runs
         GameScript(17, rText)
-    }
-    Teams[bti].Boxscore.inning[Inning.num-1] += runs
+    //}
 }
 
 func AdvanceRunners(bases int, pos int) {
@@ -688,10 +708,6 @@ func AdvanceRunners(bases int, pos int) {
                     Inning.third = false
             }
         case 3:
-            // will always clear the bases (and will put current batter on third)
-            Inning.first = false
-            Inning.second = false
-            Inning.third = true
             switch BasesStatus() {
                 case "true|false|false":
                     fallthrough
@@ -708,11 +724,11 @@ func AdvanceRunners(bases int, pos int) {
                 case "true|true|true":
                     IncrementScore(3, bases)
             }
-        case 4:
-            // will always clear the bases
+            // will always clear the bases (and will put current batter on third)
             Inning.first = false
             Inning.second = false
-            Inning.third = false
+            Inning.third = true
+        case 4:
             switch BasesStatus() {
                 case "false|false|false":
                     IncrementScore(1, bases)
@@ -731,6 +747,10 @@ func AdvanceRunners(bases int, pos int) {
                 case "true|true|true":
                     IncrementScore(4, bases)
             }
+            // will always clear the bases
+            Inning.first = false
+            Inning.second = false
+            Inning.third = false
     }
     if DoGameScript {
         GameScript(6, "")
@@ -785,6 +805,7 @@ func DoOut(strikeout bool) {
                 if GetRand() < 0.85 && dbText != "" {
                     Inning.outs ++  // this will only be the EXTRA out
                     GameScript(16, dbText)
+                    GameScript(6, "")  // baserunners
                 }
             }
         }
@@ -806,7 +827,7 @@ func GetRand() float64 {
     return r.Float64()
 }
 
-func GetLineup(FileName string, Team team ) team {
+func GetLineup(FileName string, Team team) team {
     file, _ := os.Open(FileName)
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
@@ -818,15 +839,7 @@ func GetLineup(FileName string, Team team ) team {
 
 	for _, eachline := range txtLines {
         line := strings.Split(eachline, "|")
-        stat, err := strconv.ParseFloat(line[3], 64)
-        if err != nil {
-          // insert error handling here
-        }
         switch line[0] {
-            case "SP":
-        		fallthrough
-            case "RP":
-        		Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], line[2], stat})
             case "city":
                 Team.city = line[1]
         	case "name":
@@ -837,11 +850,30 @@ func GetLineup(FileName string, Team team ) team {
                 W, _ := strconv.ParseFloat(line[1], 64)
                 L, _ := strconv.ParseFloat(line[2], 64)
                 Team.pct = W / (W + L)
+            case "SP":
+                fallthrough
+            case "RP":
+                ERA, _ := strconv.ParseFloat(line[3], 64)
+                Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], line[2], ERA})
         	default:  // regular position players
-        		Team.batters = append(Team.batters, batter{line[0], line[1], line[2], stat})
+                Team.batters = append(Team.batters, AddBatterToLineup(line))
         }
 	}
     return Team
+}
+
+func AddBatterToLineup(line []string) batter {
+    pos := line[0]
+    FirstName := line[1]
+    LastName := line[2]
+    H, _ := strconv.Atoi(line[3])
+    DBL, _ := strconv.Atoi(line[4])
+    TPL, _ := strconv.Atoi(line[5])
+    HR, _ := strconv.Atoi(line[6])
+    var BatterHitsPct batterHitsPct = batterHitsPct{float64(DBL) / float64(H), float64(TPL) / float64(H), float64(HR) / float64(H)}
+    AVG, _ := strconv.ParseFloat(line[7], 64)
+    var Batter batter = batter{pos, FirstName, LastName, BatterHitsPct, float64(AVG)}
+    return Batter
 }
 
 func GameScript(id int, text string) {
@@ -853,7 +885,7 @@ func GameScript(id int, text string) {
             for _, team := range Teams {
                 script += fmt.Sprintf("%s's lineup:\n", team.city)
                 for _, batter := range team.batters {
-                    script += fmt.Sprintf("%s, %s %s (AVG: %.3f)\n", batter.position, batter.FirstName, batter.LastName, batter.AVG)
+                    script += fmt.Sprintf("%s, %s %s (AVG: %.3f)\n", batter.pos, batter.FirstName, batter.LastName, batter.AVG)
                 }
                 script += fmt.Sprintf("Starting pitcher: %s %s (ERA: %.2f)\n\n", team.pitchers[0].FirstName, team.pitchers[0].LastName, team.pitchers[0].ERA)
             }
@@ -870,7 +902,7 @@ func GameScript(id int, text string) {
             } else {
                 script += "Leading off in the " + InningScript()
             }
-            script += fmt.Sprintf(" for %s, %s %s %s", Teams[bti].short, Teams[bti].batters[Teams[bti].AtBatNum].position, Teams[bti].batters[Teams[bti].AtBatNum].FirstName, Teams[bti].batters[Teams[bti].AtBatNum].LastName)
+            script += fmt.Sprintf(" for %s, %s %s %s", Teams[bti].short, Teams[bti].batters[Teams[bti].AtBatNum].pos, Teams[bti].batters[Teams[bti].AtBatNum].FirstName, Teams[bti].batters[Teams[bti].AtBatNum].LastName)
 
             Inning.LeadOff = false
         case 6:
@@ -939,7 +971,7 @@ func GameScript(id int, text string) {
             script = text + ". " + ScoreScript()
         case 18:
             // error (the text is in no way a reflection on which player caused the error, it's just a random position)
-            tPos := Teams[0].batters[int(math.Floor(GetRand()*9)) + 1].position
+            tPos := Teams[0].batters[int(math.Floor(GetRand()*9)) + 1].pos
             if tPos == "DH" {
                 tPos = "P"
             }
