@@ -84,7 +84,7 @@ type pitcher struct {
 }
 
 type boxscore struct {
-    inning []int
+    inn []int
     H int
     E int
 }
@@ -106,7 +106,7 @@ func PlayBall() {
 
 func GameOver() {
     GameScript(7, "")
-    //DrawBoxscore()
+    DrawBoxscore()
     f, _ := os.Create("GameScript")
     f.WriteString(FullGameScript)
     f.Close()
@@ -117,20 +117,29 @@ func DrawBoxscore() {
     box := "\n"
     // this is the heading of thet boxscore
     box += "    "
-    inns := len(Teams[0].Boxscore.inning)
-    for i := 1; i <= inns; i++ {
+    inns := len(Teams[0].Boxscore.inn)
+    for i := 1; i <= len(Teams[0].Boxscore.inn); i++ {
         box += fmt.Sprintf("%d ", i)
     }
     box += " R H E \n"
     // now both teams' #s
     for _, team := range Teams {
         box += team.short + " "
+        if len(team.Boxscore.inn) < inns {
+            team.Boxscore.inn = append(team.Boxscore.inn, -1)
+        }
         for i := 0; i < inns; i++ {
-            box += fmt.Sprintf("%d ", team.Boxscore.inning[i])
+            if team.Boxscore.inn[i] == -1 {
+                box += "- "
+            } else {
+                box += fmt.Sprintf("%d ", team.Boxscore.inn[i])
+            }
         }
         box += fmt.Sprintf(" %d %d %d\n", team.score, team.Boxscore.H, team.Boxscore.E)
     }
     FullGameScript += box + "\n"
+
+    fmt.Println (box)
 }
 
 func StartInning() {
@@ -146,7 +155,7 @@ func StartInning() {
         bti = 1
     }
     Inning.TopBottom = !Inning.TopBottom
-    Teams[bti].Boxscore.inning = append(Teams[bti].Boxscore.inning, 0)
+    Teams[bti].Boxscore.inn = append(Teams[bti].Boxscore.inn, 0)
     for {
         DoAtBat()
         if Inning.outs == 3 {
@@ -178,62 +187,15 @@ func EndInning() {
     // first 8 innings, always start the next inning (frame)
     if Inning.num < 9 {
         StartInning()
-    } else if Inning.num == 9 {
-        DoNinthInning()
+    }
+
+    // these ways the game is over
+    if Inning.num == 9 && Inning.TopBottom && Teams[1].score > Teams[0].score {
+        GameOver()
+    } else if Inning.num >= 9 && !Inning.TopBottom && Teams[1].score != Teams[0].score {
+        GameOver()
     } else {
-        DoExtraInnings()
-    }
-}
-
-func DoNinthInning() {
-    // ------------------
-    // 9th inning options
-    // ------------------
-
-    // (we flip the frame here, because it got flipped at the beginning of the inning)
-    var TempFrame bool = !Inning.TopBottom
-
-    // end of top of 9th, home team ahead, game over
-    if Inning.num == 9 && !TempFrame && Teams[1].score > Teams[0].score {
-        GameOver()
-    }
-    // end of top of 9th, home team NOT ahead, continue play
-    if Inning.num == 9 && !TempFrame && Teams[1].score < Teams[0].score {
         StartInning()
-    }
-    // end of bottom of 9th, home team ahead, game over
-    if Inning.num == 9 && TempFrame && Teams[1].score > Teams[0].score {
-        GameOver()
-    }
-    // end of bottom of 9th, game tied, continue play
-    if Inning.num == 9 && TempFrame && Teams[1].score == Teams[0].score {
-        StartInning()
-    }
-    // end of bottom of 9th, away team ahead, game over
-    if Inning.num == 9 && TempFrame && Teams[1].score < Teams[0].score {
-        GameOver()
-    }
-}
-
-func DoExtraInnings() {
-    // ---------------------
-    // extra innings options
-    // ---------------------
-
-    // (we flip the frame here, because it got flipped at the beginning of the inning)
-    var TempFrame bool = !Inning.TopBottom
-
-    // end of top of frame, always keep on playing
-    if Inning.num > 9 && !TempFrame {
-        StartInning()
-    }
-    // end of bottom of frame, game tied, continue playing
-    if Inning.num > 9 && TempFrame && Teams[1].score == Teams[0].score {
-        StartInning()
-    }
-    // end of bottom of frame, one team leads, game over
-    if Inning.num > 9 && TempFrame && Teams[1].score != Teams[0].score {
-        GameOver()
     }
 }
 
@@ -508,13 +470,13 @@ func TryDoublePlay(pos int) string {
     return dpText
 }
 
-func IncrementScore(runs int, bases int) {
+func IncrementScore(runs int) {
     // bases is used to determine if it's a walkoff
 
     /*
     if bases < 4 && Inning.num == 9 && Inning.TopBottom && (Teams[1].score - Teams[0].score < runs - 1) {
         Teams[bti].score ++
-        Teams[bti].Boxscore.inning[Inning.num-1] ++
+        Teams[bti].Boxscore.inn[Inning.num-1] ++
         GameScript(17, "1 run scores")
         Inning.Walkoff = true
         GameOver()
@@ -528,7 +490,7 @@ func IncrementScore(runs int, bases int) {
             default:
                 rText = strconv.Itoa(runs) + " runs score"
         }
-        Teams[bti].Boxscore.inning[Inning.num-1] += runs
+        Teams[bti].Boxscore.inn[Inning.num-1] += runs
         GameScript(17, rText)
     //}
 }
@@ -557,7 +519,7 @@ func AdvanceRunners(bases int, pos int) {
                     Inning.first = true
                     Inning.second = false
                     Inning.third = false
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                 case "true|true|false":
                     Inning.first = true
                     Inning.second = true
@@ -566,14 +528,14 @@ func AdvanceRunners(bases int, pos int) {
                     Inning.first = true
                     Inning.second = true
                     Inning.third = false
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                 case "false|true|true":
                     Inning.first = true
                     Inning.second = false
                     Inning.third = true
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                 case "true|true|true":
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                     Inning.first = true
                     Inning.second = true
                     Inning.third = true
@@ -581,7 +543,7 @@ func AdvanceRunners(bases int, pos int) {
         case -1: // out (sac fly)
             if pos >= 7 && Inning.third && Inning.outs < 3 {
                 Inning.third = false  // the other 2 baserunners stay the same
-                IncrementScore(1, bases)
+                IncrementScore(1)
             } else {
                 DoGameScript = false
             }
@@ -610,7 +572,7 @@ func AdvanceRunners(bases int, pos int) {
                     Inning.second = true
                     Inning.third = true
                 case "true|true|true":
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                     Inning.first = true
                     Inning.second = true
                     Inning.third = true
@@ -636,13 +598,13 @@ func AdvanceRunners(bases int, pos int) {
                     Inning.first = true
                     Inning.second = false
                     Inning.third = false
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                 case "true|true|false":
                     Inning.first = true
                     if pos >= 8 {
                         Inning.second = false
                         Inning.third = false
-                        IncrementScore(1, bases)
+                        IncrementScore(1)
                     } else {
                         Inning.second = false
                         Inning.third = true
@@ -650,7 +612,7 @@ func AdvanceRunners(bases int, pos int) {
                 case "true|false|true":
                     Inning.first = true
                     Inning.third = false
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                     if pos == 9 {
                         Inning.third = true
                     } else {
@@ -660,20 +622,20 @@ func AdvanceRunners(bases int, pos int) {
                     Inning.first = true
                     Inning.second = false
                     if pos >= 8 {
-                        IncrementScore(2, bases)
+                        IncrementScore(2)
                         Inning.third = false
                     } else {
-                        IncrementScore(1, bases)
+                        IncrementScore(1)
                         Inning.third = true
                     }
                 case "true|true|true":
                     Inning.first = true
                     Inning.third = true
                     if pos >= 8 {
-                        IncrementScore(2, bases)
+                        IncrementScore(2)
                         Inning.second = false
                     } else {
-                        IncrementScore(1, bases)
+                        IncrementScore(1)
                         Inning.second = true
                     }
             }
@@ -688,7 +650,7 @@ func AdvanceRunners(bases int, pos int) {
                 case "false|true|false":
                     fallthrough
                 case "false|false|true":
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
@@ -697,12 +659,12 @@ func AdvanceRunners(bases int, pos int) {
                 case "true|false|true":
                     fallthrough
                 case "false|true|true":
-                    IncrementScore(2, bases)
+                    IncrementScore(2)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
                 case "true|true|true":
-                    IncrementScore(3, bases)
+                    IncrementScore(3)
                     Inning.first = false
                     Inning.second = true
                     Inning.third = false
@@ -714,15 +676,15 @@ func AdvanceRunners(bases int, pos int) {
                 case "false|true|false":
                     fallthrough
                 case "false|false|true":
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                 case "true|true|false":
                     fallthrough
                 case "true|false|true":
                     fallthrough
                 case "false|true|true":
-                    IncrementScore(2, bases)
+                    IncrementScore(2)
                 case "true|true|true":
-                    IncrementScore(3, bases)
+                    IncrementScore(3)
             }
             // will always clear the bases (and will put current batter on third)
             Inning.first = false
@@ -731,21 +693,21 @@ func AdvanceRunners(bases int, pos int) {
         case 4:
             switch BasesStatus() {
                 case "false|false|false":
-                    IncrementScore(1, bases)
+                    IncrementScore(1)
                 case "true|false|false":
                     fallthrough
                 case "false|true|false":
                     fallthrough
                 case "false|false|true":
-                    IncrementScore(2, bases)
+                    IncrementScore(2)
                 case "true|true|false":
                     fallthrough
                 case "true|false|true":
                     fallthrough
                 case "false|true|true":
-                    IncrementScore(3, bases)
+                    IncrementScore(3)
                 case "true|true|true":
-                    IncrementScore(4, bases)
+                    IncrementScore(4)
             }
             // will always clear the bases
             Inning.first = false
@@ -814,7 +776,7 @@ func DoOut(strikeout bool) {
     Count.balls = 0
     Inning.outs ++  // always increment the regular out
     AdvanceLineup()
-    if Inning.outs == 3 || Inning.Walkoff {
+    if Inning.outs == 3 {
         EndInning()
     } else {
         GameScript(15, "")
@@ -971,7 +933,7 @@ func GameScript(id int, text string) {
             script = text + ". " + ScoreScript()
         case 18:
             // error (the text is in no way a reflection on which player caused the error, it's just a random position)
-            tPos := Teams[0].batters[int(math.Floor(GetRand()*9)) + 1].pos
+            tPos := Teams[0].batters[int(math.Floor(GetRand()*9))].pos
             if tPos == "DH" {
                 tPos = "P"
             }
