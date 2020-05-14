@@ -9,7 +9,6 @@ import (
     "math"
     "math/rand"
     "time"
-    "github.com/hegedustibor/htgo-tts"
 )
 
 var Teams [2]team
@@ -25,18 +24,19 @@ var ErrorCount int = 0
 // for inning and other --------- separator
 var RepeatChars int = 40
 
+// this is where we save the ongoing play-by-play calls
 var FullGameScript string = ""
-var AudioFileName int = 0
+
+// this will increment by 1 with each top/bottom of inning, and will be a running total, but we can determine (for printing reasons) the actual inning # and top/bottom
+var InningFrame int = -1
+// this will be translated from the InningFrame val (for script purposes)
+var InningNum int = 0
 
 type inning struct {
-    num int
-    TopBottom bool  // top True, bottom False
     outs int
     LeadOff bool    // for the script, to say if it's the leadoff batter
-    // runners on bases:
-    first bool
-    second bool
-    third bool
+    // runners on bases
+    runners [3]bool
 }
 
 type count struct {
@@ -62,13 +62,13 @@ type batter struct {
     pos string
 	FirstName string
     LastName string
-    BatterHitsPct batterHitsPct
+    BatterHitsPct batterHitsPct  // refer to comments in that struct
     AVG float64
 }
 
 type batterHitsPct struct {
     // this %age will be used for the random determining what hit they get
-    // (it's computed from the # of HR's they hit divided by # of AtBats)
+    // (it's computed from the # of DBL/TPL/HR's they hit divided by # of AtBats)
     DBL float64
     TPL float64
     HR float64
@@ -82,7 +82,7 @@ type pitcher struct {
 }
 
 type boxscore struct {
-    inn []int
+    inn []int  // will store the # of runs per each frame
     H int
     E int
 }
@@ -95,8 +95,6 @@ func main() {
 
 func PlayBall() {
     GameScript(1, "")
-    Inning.num = 0
-    Inning.TopBottom = false
     Teams[0].AtBatNum = 0
     Teams[1].AtBatNum = 0
     StartInning()
@@ -108,15 +106,17 @@ func GameOver() {
     f, _ := os.Create("GameScript")
     f.WriteString(FullGameScript)
     f.Close()
+
+
     os.Exit(-1)
 }
 
 func DrawBoxscore() {
     box := "\n"
-    // this is the heading of thet boxscore
+    // this is the heading of the boxscore
     box += "    "
     inns := len(Teams[0].Boxscore.inn)
-    for i := 1; i <= len(Teams[0].Boxscore.inn); i++ {
+    for i := 1; i <= inns; i++ {
         box += fmt.Sprintf("%d ", i)
     }
     box += " R H E \n"
@@ -138,21 +138,23 @@ func DrawBoxscore() {
     FullGameScript += box + "\n"
 
     fmt.Println (box)
+
+    f, _ := os.OpenFile("boxscore", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    f.WriteString(box)
+    f.Close()
 }
 
 func StartInning() {
+    // reset the inning numbers
     Inning.LeadOff = true
     Inning.outs = 0
-    Inning.first = false
-    Inning.second = false
-    Inning.third = false
-    if !Inning.TopBottom {
-        Inning.num ++
-        bti = 0
-    } else {
-        bti = 1
+    for i := 0; i < 2; i++ {
+        Inning.runners[i] = false
     }
-    Inning.TopBottom = !Inning.TopBottom
+
+    InningFrame ++
+    InningNum = int(math.Floor(float64(InningFrame) / 2) + 1)
+    bti = InningFrame % 2
     Teams[bti].Boxscore.inn = append(Teams[bti].Boxscore.inn, 0)
     for {
         DoAtBat()
@@ -181,18 +183,17 @@ func DoAtBat() {
 func EndInning() {
     // all this occurs at the end of an inning, BEFORE we increment the inning # and frame
     // (which we do at the beginning of StartInning)
-    GameScript(2, "")
-    // first 8 innings, always start the next inning (frame)
-    if Inning.num < 9 {
-        StartInning()
-    }
 
-    // these ways the game is over
-    if Inning.num == 9 && Inning.TopBottom && Teams[1].score > Teams[0].score {
+    // determine whether to end the game, or start another inning
+    if InningFrame == 16 && Teams[1].score > Teams[0].score {
+        // bottom of the 9th, home team ahead
         GameOver()
-    } else if Inning.num >= 9 && !Inning.TopBottom && Teams[1].score != Teams[0].score {
+    } else if InningFrame >= 17 && bti == 1 && Teams[1].score != Teams[0].score {
+        // extra innings, bottom of frame, any team ahead
         GameOver()
     } else {
+        // 1-8 innings, or any other extra inning
+        GameScript(2, "")
         StartInning()
     }
 }
@@ -253,7 +254,14 @@ func DoPitch() {
         // hit in play
         // determine if it's a hit or out
         CurrBtr := Teams[bti].batters[Teams[bti].AtBatNum]
-        if GetRand() < CurrBtr.AVG {
+        // ERA3 is ERA adjusted to 3.0
+        // (3.00 is a decent ERA, and anothing higher would make the batter stronger,
+        //  and anything lower would make the batter weaker)
+        ERA3 := Teams[bti].pitchers[0].ERA - 3.33
+        // GBOP = Getting Batter Out Percentage, we adjust the ERA3 based on the AVG
+        // so we have a fair chance at a hit/out, based on both pitcher & batter
+        GBOP := CurrBtr.AVG + (ERA3 / 50)
+        if GetRand() < GBOP {
             // he's on base
             // determine which hit type (param is # of bases in hit)
             r := GetRand()
@@ -329,163 +337,169 @@ func TryDoublePlay(pos int) string {
     switch pos {
         case 1:
             switch BasesStatus() {
-                case "false|false|false":
-                case "true|false|false":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = false
+                case "000":
+                case "100":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
                     dpText = "1-4-3"
-                case "false|true|false":
-                case "false|false|true":
-                case "true|true|false":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = true
+                case "010":
+                case "001":
+                case "110":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
                     dpText = "1-4-3"
-                case "true|false|true":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = true
+                case "101":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
                     dpText = "1-4-3"
-                case "false|true|true":
-                case "true|true|true":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = false
+                case "011":
+                case "111":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
                     dpText = "1-2-5"
             }
         case 2:
             // rare to have a catcher start a double play
         case 3:
             switch BasesStatus() {
-                case "false|false|false":
-                case "true|false|false":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = false
+                case "000":
+                case "100":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
                     dpText = "3-4-3"
-                case "false|true|false":
-                case "false|false|true":
-                case "true|true|false":
-                    Inning.first = false
-                    Inning.second = true
-                    Inning.third = false
+                case "010":
+                case "001":
+                case "110":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
                     dpText = "3-4-3"
-                case "true|false|true":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = true
+                case "101":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
                     dpText = "3-4-3"
-                case "false|true|true":
-                case "true|true|true":
-                    Inning.first = false
-                    Inning.second = true
-                    Inning.third = true
+                case "011":
+                case "111":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = true
+                    Inning.runners[2] = true
                     dpText = "3-4-3"
             }
         case 4:
             switch BasesStatus() {
-                case "false|false|false":
-                case "true|false|false":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = false
+                case "000":
+                case "100":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
                     dpText = "4-6-3"
-                case "false|true|false":
-                case "false|false|true":
-                case "true|true|false":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = true
+                case "010":
+                case "001":
+                case "110":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
                     dpText = "4-6-3"
-                case "true|false|true":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = true
+                case "101":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
                     dpText = "4-6-3"
-                case "false|true|true":
-                case "true|true|true":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = false
+                case "011":
+                case "111":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
                     dpText = "4-2-5"
             }
         case 5:
             switch BasesStatus() {
-                case "false|false|false":
-                case "true|false|false":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = false
+                case "000":
+                case "100":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
                     dpText = "5-4-3"
-                case "false|true|false":
-                case "false|false|true":
-                case "true|true|false":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = false
+                case "010":
+                case "001":
+                case "110":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
                     dpText = "5-4"
-                case "true|false|true":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = true
+                case "101":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
                     dpText = "5-4-3"
-                case "false|true|true":
-                case "true|true|true":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = false
+                case "011":
+                case "111":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
                     dpText = "5-2"
             }
         case 6:
             switch BasesStatus() {
-                case "false|false|false":
-                case "true|false|false":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = false
+                case "000":
+                case "100":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
                     dpText = "6-4-3"
-                case "false|true|false":
-                case "false|false|true":
-                case "true|true|false":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = false
+                case "010":
+                case "001":
+                case "110":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
                     dpText = "6-5"
-                case "true|false|true":
-                    Inning.first = false
-                    Inning.second = false
-                    Inning.third = true
+                case "101":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
                     dpText = "6-4-3"
-                case "false|true|true":
-                case "true|true|true":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = false
+                case "011":
+                case "111":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
                     dpText = "6-2-5"
             }
     }
     return dpText
 }
 
-func IncrementScore(runs int) {
-    var walkoff bool = false
-    // if Inning.num == 9 && Inning.TopBottom &&
-
-        Teams[bti].score += runs
-        rText := ""
-        switch (runs) {
-            case 1:
-                rText = "1 run scores"
-            default:
-                rText = strconv.Itoa(runs) + " runs score"
+func IncrementScore(runs int, HR bool) {
+    walkoff := false
+    if InningFrame >= 17 && bti == 1 && Teams[1].score + runs > Teams[0].score {
+        // in the bottom of the 9+ inning, test for a walkoff, and if so, only count the # of runs needed to win
+        // (unless it's a HR, then all runs count)
+        walkoff = true
+        if !HR {
+            runs = 1
         }
-        Teams[bti].Boxscore.inn[Inning.num-1] += runs
-        GameScript(17, rText)
-        if walkoff {
-            GameOver()
-        }
-    //}
+    }
+    Teams[bti].score += runs
+    rText := ""
+    switch (runs) {
+        case 1:
+            rText = "1 run scores"
+        default:
+            rText = strconv.Itoa(runs) + " runs score"
+    }
+    Teams[bti].Boxscore.inn[len(Teams[bti].Boxscore.inn)-1] += runs
+    GameScript(17, rText)
+    if walkoff {
+        fmt.Println("walkoff")
+        GameOver()
+    }
 }
 
 func AdvanceRunners(bases int, pos int) {
@@ -496,216 +510,216 @@ func AdvanceRunners(bases int, pos int) {
     switch bases {
         case -2: // error (assumed one base advance per runner, plus batter safe at first)
             switch BasesStatus() {
-                case "false|false|false":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = false
-                case "true|false|false":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = false
-                case "false|true|false":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = true
-                case "false|false|true":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = false
-                    IncrementScore(1)
-                case "true|true|false":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = true
-                case "true|false|true":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = false
-                    IncrementScore(1)
-                case "false|true|true":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = true
-                    IncrementScore(1)
-                case "true|true|true":
-                    IncrementScore(1)
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = true
+                case "000":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
+                case "100":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
+                case "010":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
+                case "001":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
+                    IncrementScore(1, false)
+                case "110":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = true
+                case "101":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
+                    IncrementScore(1, false)
+                case "011":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
+                    IncrementScore(1, false)
+                case "111":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = true
+                    IncrementScore(1, false)
             }
         case -1: // out (sac fly)
-            if pos >= 7 && Inning.third && Inning.outs < 2 {
-                Inning.third = false  // the other 2 baserunners stay the same
-                IncrementScore(1)
+            if pos >= 7 && Inning.runners[2] && Inning.outs < 2 {
+                Inning.runners[2] = false  // the other 2 baserunners stay the same
+                IncrementScore(1, false)
             } else {
                 DoGameScript = false
             }
         case 0: // walk
             switch BasesStatus() {
-                case "false|false|false":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = false
-                case "true|false|false":
+                case "000":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
+                case "100":
                     fallthrough
-                case "false|true|false":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = false
-                case "false|false|true":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = true
-                case "true|true|false":
+                case "010":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
+                case "001":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = true
+                case "110":
                     fallthrough
-                case "true|false|true":
+                case "101":
                     fallthrough
-                case "false|true|true":
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = true
-                case "true|true|true":
-                    IncrementScore(1)
-                    Inning.first = true
-                    Inning.second = true
-                    Inning.third = true
+                case "011":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = true
+                case "111":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = true
+                    Inning.runners[2] = true
+                    IncrementScore(1, false)
             }
         case 1:
             switch BasesStatus() {
-                case "false|false|false":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = false
-                case "true|false|false":
-                    Inning.first = true
+                case "000":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
+                case "100":
+                    Inning.runners[0] = true
                     if pos == 9 {
-                        Inning.second = false
-                        Inning.third = true
+                        Inning.runners[1] = false
+                        Inning.runners[2] = true
                     } else {
-                        Inning.second = true
-                        Inning.third = false
+                        Inning.runners[1] = true
+                        Inning.runners[2] = false
                     }
-                case "false|true|false":
+                case "010":
                     fallthrough
-                case "false|false|true":
-                    Inning.first = true
-                    Inning.second = false
-                    Inning.third = false
-                    IncrementScore(1)
-                case "true|true|false":
-                    Inning.first = true
+                case "001":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
+                    Inning.runners[2] = false
+                    IncrementScore(1, false)
+                case "110":
+                    Inning.runners[0] = true
                     if pos >= 8 {
-                        Inning.second = false
-                        Inning.third = false
-                        IncrementScore(1)
+                        Inning.runners[1] = false
+                        Inning.runners[2] = false
+                        IncrementScore(1, false)
                     } else {
-                        Inning.second = false
-                        Inning.third = true
+                        Inning.runners[1] = false
+                        Inning.runners[2] = true
                     }
-                case "true|false|true":
-                    Inning.first = true
-                    Inning.third = false
-                    IncrementScore(1)
+                case "101":
+                    Inning.runners[0] = true
+                    Inning.runners[2] = false
                     if pos == 9 {
-                        Inning.third = true
+                        Inning.runners[2] = true
                     } else {
-                        Inning.second = true
+                        Inning.runners[1] = true
                     }
-                case "false|true|true":
-                    Inning.first = true
-                    Inning.second = false
+                    IncrementScore(1, false)
+                case "011":
+                    Inning.runners[0] = true
+                    Inning.runners[1] = false
                     if pos >= 8 {
-                        IncrementScore(2)
-                        Inning.third = false
+                        Inning.runners[2] = false
+                        IncrementScore(2, false)
                     } else {
-                        IncrementScore(1)
-                        Inning.third = true
+                        Inning.runners[2] = true
+                        IncrementScore(1, false)
                     }
-                case "true|true|true":
-                    Inning.first = true
-                    Inning.third = true
+                case "111":
+                    Inning.runners[0] = true
+                    Inning.runners[2] = true
                     if pos >= 8 {
-                        IncrementScore(2)
-                        Inning.second = false
+                        Inning.runners[1] = false
+                        IncrementScore(2, false)
                     } else {
-                        IncrementScore(1)
-                        Inning.second = true
+                        Inning.runners[1] = true
+                        IncrementScore(1, false)
                     }
             }
         case 2:
             switch BasesStatus() {
-                case "false|false|false":
-                    Inning.first = false
-                    Inning.second = true
-                    Inning.third = false
-                case "true|false|false":
+                case "000":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
+                case "100":
                     fallthrough
-                case "false|true|false":
+                case "010":
                     fallthrough
-                case "false|false|true":
-                    IncrementScore(1)
-                    Inning.first = false
-                    Inning.second = true
-                    Inning.third = false
-                case "true|true|false":
+                case "001":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
+                    IncrementScore(1, false)
+                case "110":
                     fallthrough
-                case "true|false|true":
+                case "101":
                     fallthrough
-                case "false|true|true":
-                    IncrementScore(2)
-                    Inning.first = false
-                    Inning.second = true
-                    Inning.third = false
-                case "true|true|true":
-                    IncrementScore(3)
-                    Inning.first = false
-                    Inning.second = true
-                    Inning.third = false
+                case "011":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
+                    IncrementScore(2, false)
+                case "111":
+                    Inning.runners[0] = false
+                    Inning.runners[1] = true
+                    Inning.runners[2] = false
+                    IncrementScore(3, false)
             }
         case 3:
             switch BasesStatus() {
-                case "true|false|false":
+                case "100":
                     fallthrough
-                case "false|true|false":
+                case "010":
                     fallthrough
-                case "false|false|true":
-                    IncrementScore(1)
-                case "true|true|false":
+                case "001":
+                    IncrementScore(1, false)
+                case "110":
                     fallthrough
-                case "true|false|true":
+                case "101":
                     fallthrough
-                case "false|true|true":
-                    IncrementScore(2)
-                case "true|true|true":
-                    IncrementScore(3)
+                case "011":
+                    IncrementScore(2, false)
+                case "111":
+                    IncrementScore(3, false)
             }
             // will always clear the bases (and will put current batter on third)
-            Inning.first = false
-            Inning.second = false
-            Inning.third = true
+            Inning.runners[0] = false
+            Inning.runners[1] = false
+            Inning.runners[2] = true
         case 4:
             switch BasesStatus() {
-                case "false|false|false":
-                    IncrementScore(1)
-                case "true|false|false":
+                case "000":
+                    IncrementScore(1, true)
+                case "100":
                     fallthrough
-                case "false|true|false":
+                case "010":
                     fallthrough
-                case "false|false|true":
-                    IncrementScore(2)
-                case "true|true|false":
+                case "001":
+                    IncrementScore(2, true)
+                case "110":
                     fallthrough
-                case "true|false|true":
+                case "101":
                     fallthrough
-                case "false|true|true":
-                    IncrementScore(3)
-                case "true|true|true":
-                    IncrementScore(4)
+                case "011":
+                    IncrementScore(3, true)
+                case "111":
+                    IncrementScore(4, true)
             }
             // will always clear the bases
-            Inning.first = false
-            Inning.second = false
-            Inning.third = false
+            Inning.runners[0] = false
+            Inning.runners[1] = false
+            Inning.runners[2] = false
     }
     if DoGameScript {
         GameScript(6, "")
@@ -713,7 +727,15 @@ func AdvanceRunners(bases int, pos int) {
 }
 
 func BasesStatus() string {
-    return strconv.FormatBool(Inning.first) + "|" + strconv.FormatBool(Inning.second)  + "|" + strconv.FormatBool(Inning.third)
+    var retVal string = ""
+    for i := 0; i <= 2; i++ {
+        if Inning.runners[i] {
+            retVal += "1"
+        } else {
+            retVal += "0"
+        }
+    }
+    return retVal
 }
 
 func DoOut(strikeout bool) {
@@ -863,19 +885,19 @@ func GameScript(id int, text string) {
         case 6:
             // after runners advancing
             switch BasesStatus() {
-                case "true|false|false":
+                case "100":
                     script = "A runner at first base"
-                case "false|true|false":
+                case "010":
                     script = "A runner at second base"
-                case "false|false|true":
+                case "001":
                     script = "A runner at third base"
-                case "true|true|false":
+                case "110":
                     script = "Runners at first and second"
-                case "true|false|true":
+                case "101":
                     script = "Runners at first and third"
-                case "false|true|true":
+                case "011":
                     script = "Runners at second and third"
-                case "true|true|true":
+                case "111":
                     script = "Bases loaded"
             }
         case 7:
@@ -932,9 +954,7 @@ func GameScript(id int, text string) {
             }
             script = "Error on " + tPos
     }
-    //fmt.Println(script)
     FullGameScript += script + "\n"
-    // TTS(script)
 }
 
 func ScoreScript() string {
@@ -970,27 +990,27 @@ func RandomField () string {
 
 func InningScript () string {
     var is string = ""
-    if Inning.TopBottom {
+    if bti == 0 {
         is += "top"
     } else {
         is += "bottom"
     }
-    is += fmt.Sprintf(" of the %d", Inning.num)
-    switch Inning.num {
+    is += fmt.Sprintf(" of the %d", InningNum)
+    switch InningFrame {
+        case 0:
+            fallthrough
         case 1:
             is += "st"
         case 2:
-            is += "nd"
+            fallthrough
         case 3:
+            is += "nd"
+        case 4:
+            fallthrough
+        case 5:
             is += "rd"
         default:
             is += "th"
     }
     return is
-}
-
-func TTS(script string) {
-    AudioFileName ++
-    speech := htgotts.Speech{Folder: "audio", Language: "en"}
-    speech.Speak(script)
 }
