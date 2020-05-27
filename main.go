@@ -106,8 +106,6 @@ func GameOver() {
     f, _ := os.Create("GameScript")
     f.WriteString(FullGameScript)
     f.Close()
-
-
     os.Exit(-1)
 }
 
@@ -148,9 +146,7 @@ func StartInning() {
     // reset the inning numbers
     Inning.LeadOff = true
     Inning.outs = 0
-    for i := 0; i < 2; i++ {
-        Inning.runners[i] = false
-    }
+    SetRunnersStatus([]bool{false, false, false})
 
     InningFrame ++
     InningNum = int(math.Floor(float64(InningFrame) / 2) + 1)
@@ -199,9 +195,10 @@ func EndInning() {
 }
 
 func DoPitch() {
+    // assuming that an average count of an at-bat is 2-1 and then he hits it, so that's a .25 chance of him hitting it
     if GetRand() < 0.75 {
-        // ball or strike
-        if GetRand() < 0.5 {
+        // ball or strike (2/3 chance of a ball)
+        if GetRand() < 0.667 {
             // ball
             Count.balls ++
             GameScript(12, "")
@@ -332,146 +329,45 @@ func AdvanceLineup() {
     }
 }
 
+func SetRunnersStatus(runners []bool) {
+    for i:= 0; i<2; i++ {
+        Inning.runners[i] = runners[i]
+    }
+}
+
 func TryDoublePlay(pos int) string {
+    var dbTurned bool = true // this will be the result
     var dpText string = ""
-    switch pos {
-        case 1:
-            switch BasesStatus() {
-                case "000":
-                case "100":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
-                    dpText = "1-4-3"
-                case "010":
-                case "001":
-                case "110":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
-                    dpText = "1-4-3"
-                case "101":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
-                    dpText = "1-4-3"
-                case "011":
-                case "111":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
-                    dpText = "1-2-5"
-            }
-        case 2:
-            // rare to have a catcher start a double play
-        case 3:
-            switch BasesStatus() {
-                case "000":
-                case "100":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
-                    dpText = "3-4-3"
-                case "010":
-                case "001":
-                case "110":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
-                    dpText = "3-4-3"
-                case "101":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
-                    dpText = "3-4-3"
-                case "011":
-                case "111":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = true
-                    Inning.runners[2] = true
-                    dpText = "3-4-3"
-            }
-        case 4:
-            switch BasesStatus() {
-                case "000":
-                case "100":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
-                    dpText = "4-6-3"
-                case "010":
-                case "001":
-                case "110":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
-                    dpText = "4-6-3"
-                case "101":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
-                    dpText = "4-6-3"
-                case "011":
-                case "111":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
-                    dpText = "4-2-5"
-            }
-        case 5:
-            switch BasesStatus() {
-                case "000":
-                case "100":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
-                    dpText = "5-4-3"
-                case "010":
-                case "001":
-                case "110":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
-                    dpText = "5-4"
-                case "101":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
-                    dpText = "5-4-3"
-                case "011":
-                case "111":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
-                    dpText = "5-2"
-            }
-        case 6:
-            switch BasesStatus() {
-                case "000":
-                case "100":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
-                    dpText = "6-4-3"
-                case "010":
-                case "001":
-                case "110":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
-                    dpText = "6-5"
-                case "101":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
-                    dpText = "6-4-3"
-                case "011":
-                case "111":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
-                    dpText = "6-2-5"
-            }
+    // who's the middle man for the double play
+    var players = [3]int {pos, 4, 3}
+    players[1] = 4
+    if pos == 5 {
+        players[1] = 4
+    }
+
+    if pos != 2 {  // rare to have a catcher start a double play
+        switch BasesStatus() {
+            case "000":
+                dbTurned = false
+            case "100":
+                SetRunnersStatus([]bool{false, false, false})
+            case "010":
+                dbTurned = false
+            case "001":
+                dbTurned = false
+            case "110":
+                fallthrough
+            case "101":
+                SetRunnersStatus([]bool{false, false, true})
+            case "011":
+                dbTurned = false
+            case "111":
+                SetRunnersStatus([]bool{true, true, false})
+                players = [3]int {pos, 4, 3}
+        }
+    }
+    if dbTurned {
+        dpText = strconv.Itoa(players[0]) + "-" + strconv.Itoa(players[1]) + "-" + strconv.Itoa(players[2])
     }
     return dpText
 }
@@ -511,40 +407,24 @@ func AdvanceRunners(bases int, pos int) {
         case -2: // error (assumed one base advance per runner, plus batter safe at first)
             switch BasesStatus() {
                 case "000":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, false, false})
                 case "100":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, true, false})
                 case "010":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
+                    SetRunnersStatus([]bool{true, false, true})
                 case "001":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, false, false})
                     IncrementScore(1, false)
                 case "110":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = true
+                    SetRunnersStatus([]bool{true, true, true})
                 case "101":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, true, false})
                     IncrementScore(1, false)
                 case "011":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
+                    SetRunnersStatus([]bool{true, false, true})
                     IncrementScore(1, false)
                 case "111":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = true
+                    SetRunnersStatus([]bool{true, true, true})
                     IncrementScore(1, false)
             }
         case -1: // out (sac fly)
@@ -557,123 +437,89 @@ func AdvanceRunners(bases int, pos int) {
         case 0: // walk
             switch BasesStatus() {
                 case "000":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, false, false})
                 case "100":
                     fallthrough
                 case "010":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, true, false})
                 case "001":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = true
+                    SetRunnersStatus([]bool{true, false, true})
                 case "110":
                     fallthrough
                 case "101":
                     fallthrough
                 case "011":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = true
+                    SetRunnersStatus([]bool{true, true, true})
                 case "111":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = true
-                    Inning.runners[2] = true
+                    SetRunnersStatus([]bool{true, true, true})
                     IncrementScore(1, false)
             }
         case 1:
             switch BasesStatus() {
                 case "000":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, false, false})
                 case "100":
-                    Inning.runners[0] = true
                     if pos == 9 {
-                        Inning.runners[1] = false
-                        Inning.runners[2] = true
+                        SetRunnersStatus([]bool{true, false, true})
                     } else {
-                        Inning.runners[1] = true
-                        Inning.runners[2] = false
+                        SetRunnersStatus([]bool{true, true, false})
                     }
                 case "010":
                     fallthrough
                 case "001":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{true, false, false})
                     IncrementScore(1, false)
                 case "110":
-                    Inning.runners[0] = true
                     if pos >= 8 {
-                        Inning.runners[1] = false
-                        Inning.runners[2] = false
+                        SetRunnersStatus([]bool{true, false, false})
                         IncrementScore(1, false)
                     } else {
-                        Inning.runners[1] = false
-                        Inning.runners[2] = true
+                        SetRunnersStatus([]bool{true, false, true})
                     }
                 case "101":
-                    Inning.runners[0] = true
-                    Inning.runners[2] = false
                     if pos == 9 {
-                        Inning.runners[2] = true
+                        SetRunnersStatus([]bool{true, false, true})
                     } else {
-                        Inning.runners[1] = true
+                        SetRunnersStatus([]bool{true, true, false})
                     }
                     IncrementScore(1, false)
                 case "011":
-                    Inning.runners[0] = true
-                    Inning.runners[1] = false
                     if pos >= 8 {
-                        Inning.runners[2] = false
+                        SetRunnersStatus([]bool{true, false, false})
                         IncrementScore(2, false)
                     } else {
-                        Inning.runners[2] = true
+                        SetRunnersStatus([]bool{true, false, true})
                         IncrementScore(1, false)
                     }
                 case "111":
-                    Inning.runners[0] = true
-                    Inning.runners[2] = true
                     if pos >= 8 {
-                        Inning.runners[1] = false
+                        SetRunnersStatus([]bool{true, false, true})
                         IncrementScore(2, false)
                     } else {
-                        Inning.runners[1] = true
+                        SetRunnersStatus([]bool{true, true, true})
                         IncrementScore(1, false)
                     }
             }
         case 2:
             switch BasesStatus() {
                 case "000":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{false, true, false})
                 case "100":
                     fallthrough
                 case "010":
                     fallthrough
                 case "001":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{false, true, false})
                     IncrementScore(1, false)
                 case "110":
                     fallthrough
                 case "101":
                     fallthrough
                 case "011":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{false, true, false})
                     IncrementScore(2, false)
                 case "111":
-                    Inning.runners[0] = false
-                    Inning.runners[1] = true
-                    Inning.runners[2] = false
+                    SetRunnersStatus([]bool{false, true, false})
                     IncrementScore(3, false)
             }
         case 3:
@@ -694,9 +540,7 @@ func AdvanceRunners(bases int, pos int) {
                     IncrementScore(3, false)
             }
             // will always clear the bases (and will put current batter on third)
-            Inning.runners[0] = false
-            Inning.runners[1] = false
-            Inning.runners[2] = true
+            SetRunnersStatus([]bool{false, false, true})
         case 4:
             switch BasesStatus() {
                 case "000":
@@ -717,9 +561,7 @@ func AdvanceRunners(bases int, pos int) {
                     IncrementScore(4, true)
             }
             // will always clear the bases
-            Inning.runners[0] = false
-            Inning.runners[1] = false
-            Inning.runners[2] = false
+            SetRunnersStatus([]bool{false, false, false})
     }
     if DoGameScript {
         GameScript(6, "")
@@ -779,11 +621,16 @@ func DoOut(strikeout bool) {
         } else {
             if Inning.outs < 2 {
                 dbText := TryDoublePlay(pos)
+                if dbText != "" {
+                    dbText = "Double play " + dbText
+                }
                 if GetRand() < 0.85 && dbText != "" {
                     Inning.outs ++  // this will only be the EXTRA out
-                    GameScript(16, dbText)
-                    GameScript(6, "")  // baserunners
+                } else {
+                    dbText = "Attempted double play. Only 1 out recorded"
                 }
+                GameScript(16, dbText)
+                GameScript(6, "")  // baserunners
             }
         }
     }
@@ -941,8 +788,8 @@ func GameScript(id int, text string) {
                 script += "s"
             }
         case 16:
-            // double play
-            script = "Double play " + text
+            // double play (whether successful or failed attempt)
+            script = text
         case 17:
             // run(s) score(s)
             script = text + ". " + ScoreScript()
