@@ -630,14 +630,19 @@ func DoOut(strikeout bool) {
                         }
                         GameScript(16, dbText)
                     }
-                    GameScript(6, "")  // baserunners
+                    if Inning.outs < 2 {
+                        // less than 2 outs will make sure that it won't print a runner on base on an inning ending double play
+                        GameScript(6, "")  // baserunners
+                    }
                 }
             }
         }
     }
+
     Count.strikes = 0
     Count.balls = 0
     Inning.outs ++  // always increment the regular out
+    
     AdvanceLineup()
     if Inning.outs == 3 {
         EndInning()
