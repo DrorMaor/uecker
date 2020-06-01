@@ -26,6 +26,7 @@ var RepeatChars int = 40
 
 // this is where we save the ongoing play-by-play calls
 var FullGameScript string = ""
+var PlayNum int = 0 // for debugging
 
 // this will increment by 1 with each top/bottom of inning, and will be a running total, but we can determine (for printing reasons) the actual inning # and top/bottom
 var InningFrame int = -1
@@ -144,9 +145,9 @@ func DrawBoxscore() {
 
 func StartInning() {
     // reset the inning numbers
-    Inning.LeadOff = true
     Inning.outs = 0
-    SetRunnersStatus([]bool{false, false, false})
+    Inning.LeadOff = true
+    SetRunnersStatus([3]bool {false, false, false})
 
     InningFrame ++
     InningNum = int(math.Floor(float64(InningFrame) / 2) + 1)
@@ -204,7 +205,6 @@ func DoPitch() {
             GameScript(12, "")
             if Count.balls == 4 {
                 // walk
-                Count.balls = 0
                 AdvanceRunners(0, -1)
                 AdvanceLineup()
                 DoAtBat()
@@ -249,6 +249,7 @@ func DoPitch() {
         }
     } else {
         // hit in play
+
         // determine if it's a hit or out
         CurrBtr := Teams[bti].batters[Teams[bti].AtBatNum]
         // ERA3 is ERA adjusted to 3.0
@@ -314,7 +315,7 @@ func TryError() bool {
 func DoHit(bases int, text string) {
     GameScript(8, text)
 
-    // most hits are out of the infield, so we assume them here
+    // most base hits are out of the infield, so we assume them here
     outfield := int(math.Floor(GetRand()*3)) + 7  // left, center, or right field (nfk"m for runner scoring from second)
     AdvanceRunners(bases, outfield)
     AdvanceLineup()
@@ -329,43 +330,43 @@ func AdvanceLineup() {
     }
 }
 
-func SetRunnersStatus(runners []bool) {
-    for i:= 0; i<2; i++ {
+func SetRunnersStatus(runners [3]bool) {
+    for i := 0; i <= 2; i++ {
         Inning.runners[i] = runners[i]
     }
 }
 
 func TryDoublePlay(pos int) string {
-    var dbTurned bool = true // this will be the result
-    var dpText string = ""
+    var dbTurned bool = true // this will be the result (will be the default value here, unless it's set to false)
+
     // who's the middle man for the double play
     var players = [3]int {pos, 4, 3}
     players[1] = 4
     if pos == 5 {
-        players[1] = 4
+        players[1] = 6
     }
 
-    if pos != 2 {  // rare to have a catcher start a double play
-        switch BasesStatus() {
-            case "000":
-                dbTurned = false
-            case "100":
-                SetRunnersStatus([]bool{false, false, false})
-            case "010":
-                dbTurned = false
-            case "001":
-                dbTurned = false
-            case "110":
-                fallthrough
-            case "101":
-                SetRunnersStatus([]bool{false, false, true})
-            case "011":
-                dbTurned = false
-            case "111":
-                SetRunnersStatus([]bool{true, true, false})
-                players = [3]int {pos, 4, 3}
-        }
+    switch BasesStatus() {
+        case "000":
+            dbTurned = false
+        case "100":
+            Inning.runners[0] = false
+        case "010":
+            fallthrough
+        case "001":
+            dbTurned = false
+        case "110":
+            fallthrough
+        case "101":
+            SetRunnersStatus([3]bool {false, false, true})
+        case "011":
+            dbTurned = false
+        case "111":
+            SetRunnersStatus([3]bool {true, true, false})
+            players = [3]int {pos, 2, 5}
     }
+
+    var dpText string = ""
     if dbTurned {
         dpText = strconv.Itoa(players[0]) + "-" + strconv.Itoa(players[1]) + "-" + strconv.Itoa(players[2])
     }
@@ -393,7 +394,6 @@ func IncrementScore(runs int, HR bool) {
     Teams[bti].Boxscore.inn[len(Teams[bti].Boxscore.inn)-1] += runs
     GameScript(17, rText)
     if walkoff {
-        fmt.Println("walkoff")
         GameOver()
     }
 }
@@ -407,24 +407,23 @@ func AdvanceRunners(bases int, pos int) {
         case -2: // error (assumed one base advance per runner, plus batter safe at first)
             switch BasesStatus() {
                 case "000":
-                    SetRunnersStatus([]bool{true, false, false})
+                    SetRunnersStatus([3]bool {true, false, false})
                 case "100":
-                    SetRunnersStatus([]bool{true, true, false})
+                    SetRunnersStatus([3]bool {true, true, false})
                 case "010":
-                    SetRunnersStatus([]bool{true, false, true})
+                    SetRunnersStatus([3]bool {true, false, true})
                 case "001":
-                    SetRunnersStatus([]bool{true, false, false})
+                    SetRunnersStatus([3]bool {true, false, false})
                     IncrementScore(1, false)
                 case "110":
-                    SetRunnersStatus([]bool{true, true, true})
+                    SetRunnersStatus([3]bool {true, true, true})
                 case "101":
-                    SetRunnersStatus([]bool{true, true, false})
+                    SetRunnersStatus([3]bool {true, true, false})
                     IncrementScore(1, false)
                 case "011":
-                    SetRunnersStatus([]bool{true, false, true})
+                    SetRunnersStatus([3]bool {true, false, true})
                     IncrementScore(1, false)
                 case "111":
-                    SetRunnersStatus([]bool{true, true, true})
                     IncrementScore(1, false)
             }
         case -1: // out (sac fly)
@@ -437,93 +436,93 @@ func AdvanceRunners(bases int, pos int) {
         case 0: // walk
             switch BasesStatus() {
                 case "000":
-                    SetRunnersStatus([]bool{true, false, false})
+                    SetRunnersStatus([3]bool {true, false, false})
                 case "100":
                     fallthrough
                 case "010":
-                    SetRunnersStatus([]bool{true, true, false})
+                    SetRunnersStatus([3]bool {true, true, false})
                 case "001":
-                    SetRunnersStatus([]bool{true, false, true})
+                    SetRunnersStatus([3]bool {true, false, true})
                 case "110":
                     fallthrough
                 case "101":
                     fallthrough
                 case "011":
-                    SetRunnersStatus([]bool{true, true, true})
+                    SetRunnersStatus([3]bool {true, true, true})
                 case "111":
-                    SetRunnersStatus([]bool{true, true, true})
                     IncrementScore(1, false)
             }
+        // from now on these are # of bases in the hit
         case 1:
             switch BasesStatus() {
                 case "000":
-                    SetRunnersStatus([]bool{true, false, false})
+                    SetRunnersStatus([3]bool {true, false, false})
                 case "100":
                     if pos == 9 {
-                        SetRunnersStatus([]bool{true, false, true})
+                        // runner will advance from 1st to 3rd on a single to right
+                        SetRunnersStatus([3]bool {true, false, true})
                     } else {
-                        SetRunnersStatus([]bool{true, true, false})
+                        SetRunnersStatus([3]bool {true, true, false})
                     }
                 case "010":
+                    // runner will score from second
                     fallthrough
                 case "001":
-                    SetRunnersStatus([]bool{true, false, false})
+                    SetRunnersStatus([3]bool {true, false, false})
                     IncrementScore(1, false)
                 case "110":
                     if pos >= 8 {
-                        SetRunnersStatus([]bool{true, false, false})
-                        IncrementScore(1, false)
+                        SetRunnersStatus([3]bool {true, false, true})
                     } else {
-                        SetRunnersStatus([]bool{true, false, true})
+                        SetRunnersStatus([3]bool {true, true, false})
                     }
+                    IncrementScore(1, false)
                 case "101":
-                    if pos == 9 {
-                        SetRunnersStatus([]bool{true, false, true})
+                    if pos >= 8 {
+                        SetRunnersStatus([3]bool {true, false, true})
                     } else {
-                        SetRunnersStatus([]bool{true, true, false})
+                        SetRunnersStatus([3]bool {true, true, false})
                     }
                     IncrementScore(1, false)
                 case "011":
                     if pos >= 8 {
-                        SetRunnersStatus([]bool{true, false, false})
+                        SetRunnersStatus([3]bool {true, false, false})
                         IncrementScore(2, false)
                     } else {
-                        SetRunnersStatus([]bool{true, false, true})
+                        SetRunnersStatus([3]bool {true, false, true})
                         IncrementScore(1, false)
                     }
                 case "111":
                     if pos >= 8 {
-                        SetRunnersStatus([]bool{true, false, true})
+                        SetRunnersStatus([3]bool {true, false, true})
                         IncrementScore(2, false)
                     } else {
-                        SetRunnersStatus([]bool{true, true, true})
+                        SetRunnersStatus([3]bool {true, true, true})
                         IncrementScore(1, false)
                     }
             }
         case 2:
             switch BasesStatus() {
                 case "000":
-                    SetRunnersStatus([]bool{false, true, false})
                 case "100":
                     fallthrough
                 case "010":
                     fallthrough
                 case "001":
-                    SetRunnersStatus([]bool{false, true, false})
                     IncrementScore(1, false)
                 case "110":
                     fallthrough
                 case "101":
                     fallthrough
                 case "011":
-                    SetRunnersStatus([]bool{false, true, false})
                     IncrementScore(2, false)
                 case "111":
-                    SetRunnersStatus([]bool{false, true, false})
                     IncrementScore(3, false)
             }
+            SetRunnersStatus([3]bool {false, true, false})  // will always clear the bases (besides for batter himself)
         case 3:
             switch BasesStatus() {
+                case "000":
                 case "100":
                     fallthrough
                 case "010":
@@ -539,8 +538,7 @@ func AdvanceRunners(bases int, pos int) {
                 case "111":
                     IncrementScore(3, false)
             }
-            // will always clear the bases (and will put current batter on third)
-            SetRunnersStatus([]bool{false, false, true})
+            SetRunnersStatus([3]bool {false, false, true}) // will always clear the bases
         case 4:
             switch BasesStatus() {
                 case "000":
@@ -560,8 +558,7 @@ func AdvanceRunners(bases int, pos int) {
                 case "111":
                     IncrementScore(4, true)
             }
-            // will always clear the bases
-            SetRunnersStatus([]bool{false, false, false})
+            SetRunnersStatus([3]bool {false, false, false}) // will always clear the bases
     }
     if DoGameScript {
         GameScript(6, "")
@@ -620,17 +617,21 @@ func DoOut(strikeout bool) {
             AdvanceRunners(-1, pos)
         } else {
             if Inning.outs < 2 {
-                dbText := TryDoublePlay(pos)
-                if dbText != "" {
-                    dbText = "Double play " + dbText
+                if pos != 2 {  // rare to have a catcher start a double play
+                    dbText := TryDoublePlay(pos)
+                    if len(dbText) > 0 {
+                        // dbText returns true only means that it's possible for a DP,
+                        // but still there's a 10% chance it won't be turned
+                        if GetRand() < 0.9 {
+                            dbText = "Double play " + dbText
+                            Inning.outs ++  // this will only be the EXTRA out
+                        } else {
+                            dbText = "Attempted double play. Only 1 out recorded"
+                        }
+                        GameScript(16, dbText)
+                    }
+                    GameScript(6, "")  // baserunners
                 }
-                if GetRand() < 0.85 && dbText != "" {
-                    Inning.outs ++  // this will only be the EXTRA out
-                } else {
-                    dbText = "Attempted double play. Only 1 out recorded"
-                }
-                GameScript(16, dbText)
-                GameScript(6, "")  // baserunners
             }
         }
     }
@@ -732,6 +733,8 @@ func GameScript(id int, text string) {
         case 6:
             // after runners advancing
             switch BasesStatus() {
+                case "000":
+                    //script = "Bases empty"
                 case "100":
                     script = "A runner at first base"
                 case "010":
@@ -741,7 +744,11 @@ func GameScript(id int, text string) {
                 case "110":
                     script = "Runners at first and second"
                 case "101":
-                    script = "Runners at first and third"
+                    if GetRand() < 0.5 {
+                        script = "Runners at first and third"
+                    } else {
+                        script = "Runners at the corners"
+                    }
                 case "011":
                     script = "Runners at second and third"
                 case "111":
@@ -801,7 +808,8 @@ func GameScript(id int, text string) {
             }
             script = "Error on " + tPos
     }
-    FullGameScript += script + "\n"
+    PlayNum ++
+    FullGameScript += script + "\n"   // strconv.Itoa(PlayNum) + ") " +
 }
 
 func ScoreScript() string {
