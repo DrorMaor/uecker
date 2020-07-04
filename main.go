@@ -52,11 +52,11 @@ type team struct {
     pct float64   // winning percentage: W/(W+L)
     batters []batter
     pitchers []pitcher
-    batter int  // # in the lineup
-    pitcher int // # in the pitchers list
+    pitcher int  // # in the pitchers list
     score int
     AtBatNum int
     Boxscore boxscore
+    CurPitcherInns int  // this will help us determine when a pitching change is needed
 }
 
 type batter struct {
@@ -80,6 +80,8 @@ type pitcher struct {
 	FirstName string
     LastName string
     ERA float64
+    AvgInnPerGame int
+    RS string   // Reliever or Starter
 }
 
 type boxscore struct {
@@ -149,6 +151,8 @@ func StartInning() {
     Inning.LeadOff = true
     SetRunnersStatus([3]bool {false, false, false})
 
+    CheckPitchingChange()
+
     InningFrame ++
     InningNum = int(math.Floor(float64(InningFrame) / 2) + 1)
     bti = InningFrame % 2
@@ -158,6 +162,15 @@ func StartInning() {
         if Inning.outs == 3 {
             EndInning()
             break
+        }
+    }
+}
+
+func CheckPitchingChange() {
+    if Teams[bti].pitchers[Teams[bti].pitcher].AvgInnPerGame == Teams[bti].CurPitcherInns {
+        if len(Teams[bti].pitchers) > Teams[bti].pitcher + 1 {
+            Teams[bti].pitcher ++
+            Teams[bti].CurPitcherInns = 0
         }
     }
 }
@@ -180,6 +193,8 @@ func DoAtBat() {
 func EndInning() {
     // all this occurs at the end of an inning, BEFORE we increment the inning # and frame
     // (which we do at the beginning of StartInning)
+
+    Teams[bti].CurPitcherInns ++  // needed to determine if pitching change is due
 
     // determine whether to end the game, or start another inning
     if InningFrame == 16 && Teams[1].score > Teams[0].score {
@@ -255,7 +270,7 @@ func DoPitch() {
         // ERA3 is ERA adjusted to 3.0
         // (3.00 is a decent ERA, and anothing higher would make the batter stronger,
         //  and anything lower would make the batter weaker)
-        ERA3 := Teams[bti].pitchers[0].ERA - 3.33
+        ERA3 := Teams[bti].pitchers[Teams[bti].pitcher].ERA - 3.33
         // GBOP = Getting Batter Out Percentage, we adjust the ERA3 based on the AVG
         // so we have a fair chance at a hit/out, based on both pitcher & batter
         GBOP := CurrBtr.AVG + (ERA3 / 50)
@@ -380,7 +395,9 @@ func IncrementScore(runs int, HR bool) {
         // (unless it's a HR, then all runs count)
         walkoff = true
         if !HR {
-            runs = 1
+            fmt.Println("walkoff + " + strconv.Itoa(runs))
+            runs = Teams[0].score - Teams[1].score + 1
+            fmt.Println("adjusted runs: " + strconv.Itoa(runs))
         }
     }
     Teams[bti].score += runs
@@ -642,7 +659,7 @@ func DoOut(strikeout bool) {
     Count.strikes = 0
     Count.balls = 0
     Inning.outs ++  // always increment the regular out
-    
+
     AdvanceLineup()
     if Inning.outs == 3 {
         EndInning()
@@ -667,6 +684,7 @@ func GetLineup(FileName string, Team team) team {
 	}
 	file.Close()
 
+    var RS string = ""   // Reliever or Starter
 	for _, eachline := range txtLines {
         line := strings.Split(eachline, "|")
         switch line[0] {
@@ -681,10 +699,13 @@ func GetLineup(FileName string, Team team) team {
                 L, _ := strconv.ParseFloat(line[2], 64)
                 Team.pct = W / (W + L)
             case "SP":
+                RS = "S"
                 fallthrough
             case "RP":
+                RS = "R"
                 ERA, _ := strconv.ParseFloat(line[3], 64)
-                Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], line[2], ERA})
+                AvgInnPerGame, _ := strconv.Atoi(line[4])
+                Team.pitchers = append(Team.pitchers, pitcher{line[0], line[1], line[2], ERA, AvgInnPerGame, RS})
         	default:  // regular position players
                 Team.batters = append(Team.batters, AddBatterToLineup(line))
         }
